@@ -33,7 +33,8 @@ export function UserMenu({ login, onChangePassword }: { login: string; onChangeP
         </Avatar>
         <span className="hidden sm:inline">{login}</span>
       </DropdownMenuTrigger>
-      <DropdownMenuContent align="end">
+      {/* the default width follows the trigger, which is only the avatar on mobile */}
+      <DropdownMenuContent align="end" className="w-56">
         <DropdownMenuGroup>
           <DropdownMenuLabel>{login}</DropdownMenuLabel>
         </DropdownMenuGroup>
