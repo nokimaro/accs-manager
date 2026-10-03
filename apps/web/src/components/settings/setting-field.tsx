@@ -1,6 +1,6 @@
 import * as React from 'react'
 import type { SettingStateDto } from '@workspace/shared/api'
-import { settingsDef, type SettingKey } from '@workspace/shared/settings'
+import { durationInWords, rangeHint, settingsDef, unitSuffix, type SettingKey } from '@workspace/shared/settings'
 import { Badge } from '@workspace/ui/components/badge'
 import { Button } from '@workspace/ui/components/button'
 import { Checkbox } from '@workspace/ui/components/checkbox'
@@ -19,6 +19,7 @@ import { Select, SelectContent, SelectGroup, SelectItem, SelectTrigger, SelectVa
 import { Switch } from '@workspace/ui/components/switch'
 import { Textarea } from '@workspace/ui/components/textarea'
 import type { Draft } from './draft'
+import { SettingHelp } from './setting-help'
 
 export interface SettingFieldProps {
   settingKey: SettingKey
@@ -73,7 +74,7 @@ export function SettingField({ settingKey, state, draft, error, onDraft }: Setti
             onChange={(e) => setNumber(e.target.value)} aria-invalid={error ? true : undefined} />
           {meta.unit && (
             <InputGroupAddon align="inline-end">
-              <InputGroupText>{meta.unit}</InputGroupText>
+              <InputGroupText>{unitSuffix(meta.unit, value as number | null)}</InputGroupText>
             </InputGroupAddon>
           )}
         </InputGroup>
@@ -112,6 +113,7 @@ export function SettingField({ settingKey, state, draft, error, onDraft }: Setti
         <FieldSet data-invalid={error ? true : undefined}>
           <div className="flex flex-wrap items-center gap-2">
             <FieldLegend variant="label">{meta.label}</FieldLegend>
+            {meta.help && <SettingHelp label={meta.label} help={meta.help} />}
             <StateBadges overridden={overridden} effect={effect} onReset={resetDraft} />
           </div>
           {meta.description && <FieldDescription>{meta.description}</FieldDescription>}
@@ -130,16 +132,18 @@ export function SettingField({ settingKey, state, draft, error, onDraft }: Setti
       break
   }
 
-  const hint = [meta.description, rangeHint(settingKey)].filter(Boolean).join(' ')
+  const hint = valueHint(settingKey, value)
   return (
     <Field data-invalid={error ? true : undefined} orientation={meta.type === 'bool' ? 'horizontal' : 'vertical'}>
       <FieldContent>
         <div className="flex flex-wrap items-center gap-2">
           <FieldLabel htmlFor={id}>{meta.label}</FieldLabel>
+          {meta.help && <SettingHelp label={meta.label} help={meta.help} />}
           <StateBadges overridden={overridden} effect={effect} onReset={resetDraft} />
         </div>
-        {hint && <FieldDescription>{hint}</FieldDescription>}
+        {meta.description && <FieldDescription>{meta.description}</FieldDescription>}
         {meta.type !== 'bool' && control}
+        {hint && <FieldDescription>{hint}</FieldDescription>}
         {error && <FieldError>{error}</FieldError>}
       </FieldContent>
       {meta.type === 'bool' && control}
@@ -147,19 +151,12 @@ export function SettingField({ settingKey, state, draft, error, onDraft }: Setti
   )
 }
 
-function boundsText(min: number | string | undefined, max: number | string | undefined): string {
-  if (min !== undefined && max !== undefined) return `от ${min} до ${max}`
-  if (min !== undefined) return `не меньше ${min}`
-  if (max !== undefined) return `не больше ${max}`
-  return ''
-}
-
-function rangeHint(key: SettingKey): string {
-  const { type, min, max } = settingsDef[key].meta
-  const bounds = boundsText(min, max)
-  if (type === 'duration') return `Формат: 30s, 5m, 6h, 7d${bounds ? `; ${bounds}` : ''}.`
-  if ((type === 'int' || type === 'decimal') && bounds) return `${bounds[0]!.toUpperCase()}${bounds.slice(1)}.`
-  return ''
+/** Units and bounds under the control; durations also spell out the entered value. */
+function valueHint(key: SettingKey, value: unknown): string {
+  const range = rangeHint(key)
+  if (settingsDef[key].meta.type !== 'duration' || typeof value !== 'string') return range
+  const words = durationInWords(value)
+  return words ? `${range} Сейчас: ${words}.` : range
 }
 
 function StateBadges({ overridden, effect, onReset }: { overridden: boolean; effect: string | null; onReset: () => void }) {

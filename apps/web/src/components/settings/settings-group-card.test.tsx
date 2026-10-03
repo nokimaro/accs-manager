@@ -114,4 +114,23 @@ describe('SettingsGroupCard', () => {
     await user.click(screen.getByRole('button', { name: 'Отменить изменения' }))
     expect(screen.queryByText('Плохой ID')).not.toBeInTheDocument()
   })
+
+  it('explains a setting in the ⓘ popover and names its unit', async () => {
+    const user = userEvent.setup()
+    renderGroup('retention')
+    expect(screen.getByText('Сколько хранить полученные коды в панели.')).toBeInTheDocument()
+    expect(screen.getByText('В днях: от 1 до 3650.')).toBeInTheDocument()
+    expect(screen.getByText('дней')).toBeInTheDocument()
+    const input = screen.getByLabelText('Хранить коды')
+    await user.clear(input)
+    await user.type(input, '1')
+    expect(screen.getByText('день')).toBeInTheDocument()
+    await user.click(screen.getByRole('button', { name: 'Подробнее: Хранить коды' }))
+    expect(await screen.findByText(/старше этого срока удаляются автоматически/)).toBeInTheDocument()
+  })
+
+  it('spells out durations in words', () => {
+    renderGroup('proxy')
+    expect(screen.getByText('Длительность: 30s, 5m, 6h, 7d (с, мин, ч, дн.); от 1 минуты до 1 дня. Сейчас: 5 минут.')).toBeInTheDocument()
+  })
 })

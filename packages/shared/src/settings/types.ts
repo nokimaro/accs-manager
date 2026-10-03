@@ -30,6 +30,14 @@ export interface SettingGroup {
   description: string
 }
 
+/** Unit of a numeric setting: declined suffix inside the input and the phrase for the range hint. */
+export interface SettingUnit {
+  /** Forms for 1, 2–4 and 5+ items, e.g. ['день', 'дня', 'дней']. */
+  forms: readonly [one: string, few: string, many: string]
+  /** Range hint prefix, e.g. 'В днях'. */
+  hint: string
+}
+
 export interface SettingOption<V extends string = string> {
   value: V
   label: string
@@ -39,7 +47,10 @@ export interface SettingMeta {
   type: SettingType
   group: SettingGroupId
   label: string
+  /** One line under the label: what this setting is. */
   description?: string
+  /** Longer explanation in the ⓘ popover; paragraphs separated by a blank line. */
+  help?: string
   effect: SettingEffect
   /** Sort order inside the group (definition order by default). */
   order: number
@@ -50,7 +61,7 @@ export interface SettingMeta {
   min?: number | string
   max?: number | string
   step?: number
-  unit?: string
+  unit?: SettingUnit
 }
 
 /**

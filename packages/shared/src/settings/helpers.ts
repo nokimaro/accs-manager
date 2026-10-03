@@ -1,11 +1,12 @@
 import { z } from 'zod'
 import { isDuration, parseDuration } from '../duration.ts'
-import type { SettingDef, SettingEffect, SettingGroupId, SettingMeta, SettingOption, SettingType } from './types.ts'
+import type { SettingDef, SettingEffect, SettingGroupId, SettingMeta, SettingOption, SettingType, SettingUnit } from './types.ts'
 
 interface CommonOpts {
   group: SettingGroupId
   label: string
   description?: string
+  help?: string
   effect?: SettingEffect
   required?: boolean
 }
@@ -18,6 +19,7 @@ function meta(type: SettingType, o: CommonOpts, extra: Partial<SettingMeta> = {}
     group: o.group,
     label: o.label,
     ...(o.description === undefined ? {} : { description: o.description }),
+    ...(o.help === undefined ? {} : { help: o.help }),
     effect: o.effect ?? 'immediate',
     order: orderCounter++,
     required: o.required ?? false,
@@ -51,7 +53,7 @@ export function text<const D extends string | null>(
 }
 
 export function int<const D extends number | null>(
-  o: CommonOpts & { default: D; min?: number; max?: number; unit?: string },
+  o: CommonOpts & { default: D; min?: number; max?: number; unit?: SettingUnit },
 ): SettingDef<number, D> {
   let schema = z.number({ error: 'Нужно целое число' }).int('Нужно целое число')
   if (o.min !== undefined) schema = schema.min(o.min, `Не меньше ${o.min}`)
@@ -65,7 +67,7 @@ export function int<const D extends number | null>(
 
 /** Decimal values travel as strings to avoid float rounding (e.g. "0.25"). */
 export function decimal<const D extends string | null>(
-  o: CommonOpts & { default: D; min?: number; max?: number; scale?: number; unit?: string },
+  o: CommonOpts & { default: D; min?: number; max?: number; scale?: number; unit?: SettingUnit },
 ): SettingDef<string, D> {
   const scale = o.scale ?? 2
   const re = new RegExp(`^-?\\d+(\\.\\d{1,${scale}})?$`)
