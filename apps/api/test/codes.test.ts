@@ -39,4 +39,22 @@ describe('codes api', () => {
     expect((await get(`?limit=1&before=${all[0]!.id}`)).map((c) => c.code)).toEqual(['222222'])
     expect((await send(ta.app, '/api/codes?limit=0', { cookie })).status).toBe(400)
   })
+
+  it('orders by message time, so history caught up later stays below fresh codes, and pages back by that order', async () => {
+    const [c] = await ta.t.db
+      .insert(accounts)
+      .values({ tgUserId: 3, phone: '77007654321', source: 'tdata', clientProfile: 'desktop', device, connectionMode: 'direct' })
+      .returning()
+    const now = Date.parse('2026-10-03T12:00:00Z')
+    // inserted in this order: a fresh code first, then two old ones from a later catch-up (bigger ids)
+    await ta.t.db.insert(codeMessages).values({ accountId: c!.id, tgMessageId: 50, date: new Date(now), text: 'Your code is 500005', code: '500005' })
+    await ta.t.db.insert(codeMessages).values([
+      { accountId: c!.id, tgMessageId: 10, date: new Date(now - 86_400_000), text: 'Your code is 100001', code: '100001' },
+      { accountId: c!.id, tgMessageId: 11, date: new Date(now - 3_600_000), text: 'Your code is 110011', code: '110011' },
+    ])
+    const get = async (query: string) => ((await (await send(ta.app, `/api/codes${query}`, { cookie })).json()) as { items: CodeDto[] }).items
+    const page1 = await get(`?accountId=${c!.id}&limit=2`)
+    expect(page1.map((x) => x.code)).toEqual(['500005', '110011'])
+    expect((await get(`?accountId=${c!.id}&limit=2&before=${page1[1]!.id}`)).map((x) => x.code)).toEqual(['100001'])
+  })
 })

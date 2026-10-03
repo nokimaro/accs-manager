@@ -16,6 +16,8 @@ import { accountsQueryOptions, codesFeedQueryOptions } from '@/lib/accounts'
 import { useAppEvent } from '@/lib/app-events'
 import { titleHead } from '@/lib/title'
 
+const FRESH_MS = 10 * 60_000
+
 export const Route = createFileRoute('/_authed/')({
   head: titleHead('Коды'),
   validateSearch: z.object({ account: z.uuid().optional().catch(undefined) }),
@@ -27,10 +29,11 @@ function CodesPage() {
   const navigate = Route.useNavigate()
   const accounts = useQuery(accountsQueryOptions)
   const feed = useInfiniteQuery(codesFeedQueryOptions(account))
-  // codes that arrived while the page is open get a «новый» mark; the list itself refetches on `code.new`
+  // codes that arrive while the page is open get a «новый» mark (history caught up after a reconnect does not);
+  // the list itself refetches on `code.new`
   const [fresh, setFresh] = React.useState<ReadonlySet<number>>(new Set())
   useAppEvent((event) => {
-    if (event.type === 'code.new') setFresh((prev) => new Set(prev).add(event.id))
+    if (event.type === 'code.new' && Date.now() - Date.parse(event.date) < FRESH_MS) setFresh((prev) => new Set(prev).add(event.id))
   })
 
   const accountItems = [

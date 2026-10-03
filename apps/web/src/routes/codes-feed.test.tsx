@@ -104,6 +104,19 @@ describe('codes feed', () => {
     await waitFor(() => expect(screen.getAllByText('новый')).toHaveLength(1))
   })
 
+  it('does not mark history caught up after a reconnect as new', async () => {
+    let list = [code(30)]
+    setup('/', () => list)
+    expect(await screen.findByRole('button', { name: 'Скопировать код 100030' })).toBeInTheDocument()
+    act(() => FakeEventSource.last!.emit('ready'))
+
+    const old = code(31, { date: new Date(Date.now() - 3 * 86_400_000).toISOString() })
+    list = [code(30), old]
+    act(() => FakeEventSource.last!.emit('code.new', { type: 'code.new', id: 31, accountId: A1.id, code: '100031', date: old.date }))
+    expect(await screen.findByRole('button', { name: 'Скопировать код 100031' })).toBeInTheDocument()
+    expect(screen.queryByText('новый')).not.toBeInTheDocument()
+  })
+
   it('copies a code to the clipboard', async () => {
     setup('/', () => [code(7)])
     const user = userEvent.setup()
