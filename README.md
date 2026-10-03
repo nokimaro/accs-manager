@@ -1,6 +1,6 @@
 # accs-manager
 
-Панель управления Telegram-аккаунтами: импорт tdata / вход по QR, пул прокси, коды из `777000` в одном месте.
+Панель управления Telegram-аккаунтами: импорт tdata / вход по QR, пул прокси, коды из @VerificationCodes в одном месте.
 Дизайн — `docs/superpowers/specs/2026-10-03-accs-manager-design.md`.
 
 ## Разработка

@@ -95,7 +95,7 @@ export const settingsDef = {
   'notify.events': multiselect({
     group: 'notifications', label: 'О чём уведомлять', options: notifyEventOptions, default: ['code', 'proxy_down', 'unauthorized', 'banned', 'frozen', 'proxy_expiring'],
     description: 'Какие события отправлять в канал.',
-    help: '«Новый код» — каждое сообщение от Telegram (служебный чат 777000) с кодом входа.\n\nОстальные пункты — предупреждения о состоянии: аккаунт остановлен из-за недоступного прокси, сессия отозвана, бан, заморозка, скорое окончание оплаченного прокси.',
+    help: '«Новый код» — каждое сообщение с кодом из чата @VerificationCodes (коды сторонних сервисов через Telegram).\n\nОстальные пункты — предупреждения о состоянии: аккаунт остановлен из-за недоступного прокси, сессия отозвана, бан, заморозка, скорое окончание оплаченного прокси.',
   }),
   'notify.maxAge': duration({
     group: 'notifications', label: 'Не слать коды старше', default: '10m', min: '1m', max: '1d',
