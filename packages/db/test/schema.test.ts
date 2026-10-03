@@ -69,6 +69,11 @@ describe('schema', () => {
     expect(after).toMatchObject({ proxyId: null, status: 'pending_check', device })
   })
 
+  it('keeps the cloud password the panel knows, encrypted, on the account', async () => {
+    const [a] = await t.db.insert(accounts).values({ ...account(2002), cloudPasswordEnc: 'v1:a:b:c' }).returning()
+    expect(a).toMatchObject({ cloudPasswordEnc: 'v1:a:b:c' })
+  })
+
   it('removes auth keys and codes together with the account', async () => {
     const [a] = await t.db.insert(accounts).values(account(2001)).returning()
     await t.db.insert(accountAuth).values([

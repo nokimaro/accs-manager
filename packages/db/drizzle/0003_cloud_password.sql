@@ -1,0 +1,1 @@
+ALTER TABLE "accounts" ADD COLUMN "cloud_password_enc" text;

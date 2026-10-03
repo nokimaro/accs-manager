@@ -20,7 +20,8 @@ export const RUNNING_STATUSES: readonly AccountStatus[] = ['pending_check', 'act
 /** Terminal statuses: the session is gone, only deletion makes sense. */
 export const FINAL_STATUSES: readonly AccountStatus[] = ['unauthorized', 'banned']
 
-export const ACCOUNT_SOURCES = ['tdata', 'qr'] as const
+export const ACCOUNT_SOURCES = ['tdata', 'qr', 'phone'] as const
+export const accountSourceLabels: Record<(typeof ACCOUNT_SOURCES)[number], string> = { tdata: 'tdata', qr: 'QR', phone: 'по номеру' }
 export const CLIENT_PROFILES = ['desktop', 'own'] as const
 export const CONNECTION_MODES = ['proxy', 'direct'] as const
 
@@ -166,6 +167,70 @@ export const qrPasswordInput = z.object({ password: z.string().min(1).max(256) }
 
 export const QR_STATES = ['waiting', 'scanned', 'password_needed', 'password_invalid', 'done', 'failed', 'expired', 'cancelled'] as const
 export type QrState = (typeof QR_STATES)[number]
+
+// ---- login by phone number ----
+
+/** E.164 without the plus: 7 to 15 digits. Spaces, dashes, brackets and a leading + are dropped. */
+const phoneNumber = z
+  .string()
+  .transform((v) => v.replace(/[\s()+-]/g, ''))
+  .pipe(z.string().regex(/^\d{7,15}$/, 'Номер — от 7 до 15 цифр, например +7 700 123 45 67'))
+
+/** Login and email codes are digits; people paste them with spaces or dashes. */
+const digitsCode = z
+  .string()
+  .transform((v) => v.replace(/[\s-]/g, ''))
+  .pipe(z.string().regex(/^\d{3,10}$/, 'Код — только цифры'))
+
+export const startPhoneLoginInput = z.object({ phone: phoneNumber, proxyId: z.string().uuid().nullable() })
+export type StartPhoneLoginInput = z.output<typeof startPhoneLoginInput>
+export const phoneCodeInput = z.object({ code: digitsCode })
+
+export const PHONE_LOGIN_STATES = ['code_sent', 'code_invalid', 'code_expired', 'password_needed', 'password_invalid', 'done', 'failed', 'expired', 'cancelled'] as const
+export type PhoneLoginState = (typeof PHONE_LOGIN_STATES)[number]
+
+// ---- cloud password (2FA) of an account ----
+
+const cloudPassword = z.string().min(1, 'Введите пароль').max(256)
+
+/** What Telegram says about the account's cloud password, plus whether the panel knows it. */
+export const cloudPasswordInfoDto = z.object({
+  hasPassword: z.boolean(),
+  hint: z.string().nullable(),
+  /** the panel has the password stored */
+  known: z.boolean(),
+  hasRecovery: z.boolean(),
+  /** the confirmed recovery email: Telegram tells it only to someone who knows the password */
+  recoveryEmail: z.string().nullable(),
+  /** a recovery email still waiting for its code, masked by Telegram */
+  unconfirmedEmailPattern: z.string().nullable(),
+  /** someone asked Telegram to reset the password: it goes at this time unless declined */
+  pendingResetAt: z.string().nullable(),
+})
+export type CloudPasswordInfoDto = z.output<typeof cloudPasswordInfoDto>
+
+export const verifyCloudPasswordInput = z.object({ password: cloudPassword })
+
+export const setCloudPasswordInput = z.object({
+  /** only when the panel does not know the current password */
+  currentPassword: cloudPassword.optional(),
+  newPassword: cloudPassword,
+  hint: z.string().trim().max(128).optional(),
+  /** a recovery email: Telegram mails a code to confirm it */
+  email: z.string().trim().email('Неверная почта').max(256).optional(),
+})
+export type SetCloudPasswordInput = z.output<typeof setCloudPasswordInput>
+
+export const cloudPasswordEmailInput = z.discriminatedUnion('action', [
+  z.object({ action: z.literal('confirm'), code: digitsCode }),
+  z.object({ action: z.literal('resend') }),
+  z.object({ action: z.literal('cancel') }),
+])
+export type CloudPasswordEmailInput = z.output<typeof cloudPasswordEmailInput>
+
+/** The recovery email is set but waits for the code Telegram mailed. */
+export const emailCodeNeeded = z.object({ pattern: z.string().nullable(), length: z.number().nullable() })
+export type EmailCodeNeeded = z.output<typeof emailCodeNeeded>
 
 /** Shown under an account label when there is no label: phone, @username or Telegram id. */
 export function accountTitle(a: { label?: string | null; phone?: string | null; username?: string | null; tgUserId?: number | null }): string {

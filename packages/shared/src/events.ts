@@ -1,5 +1,5 @@
 import { z } from 'zod'
-import { QR_STATES } from './accounts.ts'
+import { PHONE_LOGIN_STATES, QR_STATES } from './accounts.ts'
 
 /** Redis pub/sub channel shared by api and worker; also the source of the SSE stream. */
 export const EVENTS_CHANNEL = 'accs:events'
@@ -29,6 +29,22 @@ export const appEventSchema = z.discriminatedUnion('type', [
     state: z.enum(QR_STATES),
     url: z.string().optional(),
     expiresAt: z.string().optional(),
+    hint: z.string().optional(),
+    accountId: z.string().optional(),
+    message: z.string().optional(),
+  }),
+  /** progress of a phone-number login started in the panel */
+  z.object({
+    type: z.literal('phone.update'),
+    loginId: z.string(),
+    state: z.enum(PHONE_LOGIN_STATES),
+    /** where Telegram sent the code: app, sms, call, email… */
+    deliveryType: z.string().optional(),
+    codeLength: z.number().optional(),
+    /** how «send again» would deliver it; 'none' — it cannot */
+    nextType: z.string().optional(),
+    /** «send again» works after this many seconds */
+    retryAfterSec: z.number().optional(),
     hint: z.string().optional(),
     accountId: z.string().optional(),
     message: z.string().optional(),

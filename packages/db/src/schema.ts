@@ -123,7 +123,7 @@ export const proxies = pgTable(
   ],
 )
 
-export const ACCOUNT_SOURCES = ['tdata', 'qr'] as const
+export const ACCOUNT_SOURCES = ['tdata', 'qr', 'phone'] as const
 export const CLIENT_PROFILES = ['desktop', 'own'] as const
 export const CONNECTION_MODES = ['proxy', 'direct'] as const
 export const ACCOUNT_STATUSES = ['pending_check', 'active', 'paused', 'proxy_down', 'unauthorized', 'banned', 'frozen', 'error'] as const
@@ -162,6 +162,8 @@ export const accounts = pgTable(
     frozenUntil: ts('frozen_until'),
     /** one-time mtcute string session from a tdata import (encrypted); the worker imports and clears it */
     sessionImportEnc: text('session_import_enc'),
+    /** the account's cloud (2FA) password when the panel knows it; written by the worker after Telegram accepted it */
+    cloudPasswordEnc: text('cloud_password_enc'),
     createdAt: createdAt(),
     updatedAt: updatedAt(),
   },
