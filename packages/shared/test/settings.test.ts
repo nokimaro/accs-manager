@@ -113,4 +113,10 @@ describe('validateSettingChanges', () => {
     expect(r.ok).toBe(false)
     if (!r.ok) expect(r.errors['proxyStore.apiKey']).toMatch(/Очистить/)
   })
+
+  it('rejects a __proto__ key instead of silently ignoring it', () => {
+    const r = validateSettingChanges(JSON.parse('{"__proto__": 1}') as Record<string, unknown>)
+    expect(r.ok).toBe(false)
+    if (!r.ok) expect(Object.keys(r.errors)).toEqual(['__proto__'])
+  })
 })

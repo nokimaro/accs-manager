@@ -13,7 +13,7 @@ export function isSettingKey(key: string): key is SettingKey {
  * All-or-nothing: any error → nothing is applied.
  */
 export function validateSettingChanges(input: Record<string, unknown>): SettingChangeResult {
-  const errors: Record<string, string> = {}
+  const errors: Record<string, string> = Object.create(null)
   const changes = new Map<SettingKey, unknown | null>()
   for (const [key, value] of Object.entries(input)) {
     if (!isSettingKey(key)) {
