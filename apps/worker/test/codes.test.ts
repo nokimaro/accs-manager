@@ -91,6 +91,45 @@ describe('code collector', () => {
   })
 })
 
+describe('code collector resilience', () => {
+  it('keeps trying to resolve @VerificationCodes and to catch up when Telegram fails at first', async () => {
+    const a = await insertAccount()
+    const collector = createCodeCollector(w.deps, {}, { retryDelaysMs: [20] })
+    const fake = fakeFactory((s) => {
+      s.historyMessages = [msg(5, 'Your code is 123456', 489000, 60_000)]
+      s.resolveUserId.mockRejectedValueOnce(new Error('connection reset'))
+      s.history.mockRejectedValueOnce(new Error('connection reset'))
+    })
+    const manager = createAccountManager(w.deps, fake.factory, { onSessionStarted: collector.attach }, { jitterMs: 0 })
+    try {
+      await manager.sync(a.id)
+      await vi.waitFor(async () => {
+        const rows = await w.t.db.select().from(codeMessages).where(eq(codeMessages.accountId, a.id))
+        expect(rows.map((r) => r.code)).toEqual(['123456'])
+      })
+      fake.last().emitMessage(msg(6, 'Your code is 654321'))
+      await vi.waitFor(async () => expect(await w.t.db.select().from(codeMessages).where(eq(codeMessages.accountId, a.id))).toHaveLength(2))
+    } finally {
+      await manager.stopAll()
+    }
+  })
+
+  it('does not bring back history older than the retention period', async () => {
+    const a = await insertAccount()
+    const collector = createCodeCollector(w.deps)
+    const day = 86_400_000
+    const fake = fakeFactory((s) => (s.historyMessages = [msg(7, 'Your code is 700007', 489000, 40 * day), msg(8, 'Your code is 800008', 489000, day)]))
+    const manager = createAccountManager(w.deps, fake.factory, { onSessionStarted: collector.attach }, { jitterMs: 0 })
+    try {
+      await manager.sync(a.id)
+      const rows = await w.t.db.select().from(codeMessages).where(eq(codeMessages.accountId, a.id))
+      expect(rows.map((r) => r.code)).toEqual(['800008'])
+    } finally {
+      await manager.stopAll()
+    }
+  })
+})
+
 describe('housekeeping', () => {
   it('drops old codes, expired import drafts and expired admin sessions', async () => {
     const a = await insertAccount()
