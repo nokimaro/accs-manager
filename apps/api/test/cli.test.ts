@@ -4,7 +4,7 @@ import { fileURLToPath } from 'node:url'
 import { promisify } from 'node:util'
 import { admins, auditLog } from '@workspace/db'
 import { createTestDatabase, type TestDatabase } from '@workspace/db/testing'
-import { eq } from 'drizzle-orm'
+import { eq } from '@workspace/db'
 import { afterAll, beforeAll, describe, expect, inject, it } from 'vitest'
 
 const run = promisify(execFile)

@@ -1,6 +1,6 @@
 import { createHash, randomBytes } from 'node:crypto'
 import { admins, adminSessions, type Db } from '@workspace/db'
-import { and, eq, gt, isNull, type SQL } from 'drizzle-orm'
+import { and, eq, gt, isNull, type SQL } from '@workspace/db'
 import type { SessionAdmin } from '../deps.ts'
 
 export const SESSION_COOKIE = 'accs_session'

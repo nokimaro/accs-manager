@@ -1,6 +1,6 @@
 import { auditLog } from '@workspace/db'
 import type { AppEvent } from '@workspace/shared/events'
-import { desc, eq } from 'drizzle-orm'
+import { desc, eq } from '@workspace/db'
 import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest'
 import { loginAs, send, setupApp, type TestApp } from './helpers.ts'
 

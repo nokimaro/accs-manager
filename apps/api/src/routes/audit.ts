@@ -1,7 +1,7 @@
 import { zValidator } from '@hono/zod-validator'
 import { admins, auditLog } from '@workspace/db'
 import { auditQuery, type AuditPage } from '@workspace/shared/api'
-import { and, count, desc, eq, gte, lte, type SQL } from 'drizzle-orm'
+import { and, count, desc, eq, gte, lte, type SQL } from '@workspace/db'
 import { Hono } from 'hono'
 import type { AppEnv } from '../deps.ts'
 import { validationHook } from './validation.ts'

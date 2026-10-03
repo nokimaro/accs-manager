@@ -1,4 +1,4 @@
-import { sql } from 'drizzle-orm'
+import { sql } from '@workspace/db'
 import { readWorkerHeartbeat } from '@workspace/server'
 import { Hono } from 'hono'
 import type { AppEnv } from '../deps.ts'

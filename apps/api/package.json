@@ -14,10 +14,12 @@
     "@hono/node-server": "^2.1.3",
     "@hono/zod-validator": "^0.9.1",
     "@inquirer/password": "^5.2.2",
+    "@mtcute/convert": "^0.32.3",
+    "@mtcute/core": "^0.32.3",
     "@workspace/db": "workspace:*",
     "@workspace/server": "workspace:*",
     "@workspace/shared": "workspace:*",
-    "drizzle-orm": "^0.45.3",
+    "fflate": "^0.8.3",
     "hono": "^4.13.12",
     "ioredis": "^6.0.0",
     "zod": "^4.6.5"

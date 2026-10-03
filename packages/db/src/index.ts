@@ -17,4 +17,4 @@ export {
 
 // one drizzle-orm instance for every workspace package: apps import the operators from here, not from drizzle-orm
 // (a second copy — e.g. a peer variant pulled by @mtcute/node's optional sqlite — makes their SQL types incompatible)
-export { and, asc, count, desc, eq, getTableColumns, gt, gte, inArray, isNotNull, isNull, lt, lte, ne, not, notInArray, or, sql } from 'drizzle-orm'
+export { and, asc, count, desc, eq, getTableColumns, gt, gte, inArray, isNotNull, isNull, lt, lte, ne, not, notInArray, or, sql, type SQL } from 'drizzle-orm'

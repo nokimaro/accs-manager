@@ -10,7 +10,7 @@ import {
   type ProxyDto,
   type UpdateProxyInput,
 } from '@workspace/shared/proxies'
-import { eq, getTableColumns } from 'drizzle-orm'
+import { eq, getTableColumns } from '@workspace/db'
 import { DomainError } from '../lib/errors.ts'
 
 type ProxyRow = typeof proxies.$inferSelect

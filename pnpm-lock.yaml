@@ -217,6 +217,12 @@ importers:
       '@inquirer/password':
         specifier: ^5.2.2
         version: 5.2.2(@types/node@26.6.4)
+      '@mtcute/convert':
+        specifier: ^0.32.3
+        version: 0.32.3(@mtcute/node@0.32.3)
+      '@mtcute/core':
+        specifier: ^0.32.3
+        version: 0.32.3
       '@workspace/db':
         specifier: workspace:*
         version: link:../../packages/db
@@ -226,9 +232,9 @@ importers:
       '@workspace/shared':
         specifier: workspace:*
         version: link:../../packages/shared
-      drizzle-orm:
-        specifier: ^0.45.3
-        version: 0.45.3(@types/pg@8.23.1)(pg@8.23.1)
+      fflate:
+        specifier: ^0.8.3
+        version: 0.8.3
       hono:
         specifier: ^4.13.12
         version: 4.13.12
@@ -1609,6 +1615,14 @@ packages:
     resolution: {integrity: sha512-CmCXPQrkbwExx3j946/PtHWHbYJiCRBRDl4BlkRQcJB/YOwQxJRTpoo7aTsortjgoJ1x7opzTSxn7C+ASSLVjQ==}
     cpu: [x64]
     os: [win32]
+
+  '@mtcute/convert@0.32.3':
+    resolution: {integrity: sha512-3dLKjKUvDV65vdID1eDV5xQWZnn8H2Gq8p2PUReae6VmhJK2CX7SWIH79yW/0F7S+jlvSPHo2+dJBJ8AjTqL/A==}
+    peerDependencies:
+      '@mtcute/node': ^0.32.3
+    peerDependenciesMeta:
+      '@mtcute/node':
+        optional: true
 
   '@mtcute/core@0.32.3':
     resolution: {integrity: sha512-STG2lrveYy3wuMzolMDGgpShfhgO4VpgEOk/J81KgsEFTA4SQEXRHqUJP8kv0JTjCXRPesDPb51EOUvC0/rqcw==}
@@ -3102,6 +3116,9 @@ packages:
     peerDependenciesMeta:
       picomatch:
         optional: true
+
+  fflate@0.8.3:
+    resolution: {integrity: sha512-tbZNuJrLwGUp3zshBtdy4W+ORxZuIh8a5ilyIEQDC5rY1f3U20JMry0Ll3WBzU58EZKsEuJFXhb5gwv8CsPvgA==}
 
   figures@6.1.0:
     resolution: {integrity: sha512-d+l3qxjSesT4V7v2fh+QnmFnUWv9lSpjarhShNTgBOfA0ttejbQUAlHLitbjkoRiDulW0OPoQPYIGhIC8ohejg==}
@@ -5866,6 +5883,15 @@ snapshots:
   '@msgpackr-extract/msgpackr-extract-win32-x64@3.0.4':
     optional: true
 
+  '@mtcute/convert@0.32.3(@mtcute/node@0.32.3)':
+    dependencies:
+      '@fuman/io': 0.0.21
+      '@fuman/net': 0.0.21
+      '@fuman/utils': 0.0.21
+      '@mtcute/core': 0.32.3
+    optionalDependencies:
+      '@mtcute/node': 0.32.3
+
   '@mtcute/core@0.32.3':
     dependencies:
       '@fuman/io': 0.0.21
@@ -7358,6 +7384,8 @@ snapshots:
   fdir@6.5.0(picomatch@4.0.7):
     optionalDependencies:
       picomatch: 4.0.7
+
+  fflate@0.8.3: {}
 
   figures@6.1.0:
     dependencies:

@@ -1,6 +1,6 @@
 import { accounts, auditLog, proxies } from '@workspace/db'
 import type { ProxyDto } from '@workspace/shared/proxies'
-import { desc, eq } from 'drizzle-orm'
+import { desc, eq } from '@workspace/db'
 import { afterAll, beforeAll, describe, expect, it } from 'vitest'
 import { loginAs, send, setupApp, type TestApp } from './helpers.ts'
 

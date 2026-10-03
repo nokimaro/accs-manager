@@ -1,5 +1,5 @@
 import { auditLog } from '@workspace/db'
-import { desc, eq } from 'drizzle-orm'
+import { desc, eq } from '@workspace/db'
 import { Hono } from 'hono'
 import { afterAll, beforeAll, describe, expect, it } from 'vitest'
 import type { AppDeps, AppEnv, SessionAdmin } from '../src/deps.ts'
