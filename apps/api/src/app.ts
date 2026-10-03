@@ -10,6 +10,7 @@ import { auditTrail } from './middleware/audit.ts'
 import { requireAuth, sessionLoader } from './middleware/auth.ts'
 import { DomainError } from './lib/errors.ts'
 import { originGuard } from './middleware/origin.ts'
+import { accountRoutes } from './routes/accounts.ts'
 import { adminRoutes } from './routes/admins.ts'
 import { auditRoutes } from './routes/audit.ts'
 import { authRoutes } from './routes/auth.ts'
@@ -67,6 +68,7 @@ export function createApp(deps: AppDeps): Hono<AppEnv> {
   api.route('/', settingsRoutes)
   api.route('/', proxyRoutes)
   api.route('/', importRoutes)
+  api.route('/', accountRoutes)
   api.route('/', codeRoutes)
   api.route('/', auditRoutes)
   api.route('/', eventRoutes)

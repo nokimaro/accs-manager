@@ -152,7 +152,8 @@ describe('account manager', () => {
     await manager.refreshProfiles()
     expect(await read(a.id)).toMatchObject({ username: 'renamed', isPremium: true })
 
-    await manager.stop(a.id, true)
+    expect(await manager.stop(a.id, true)).toEqual({ stopped: true, loggedOut: true })
+    expect(await manager.stop(a.id, true)).toEqual({ stopped: false, loggedOut: false })
     expect(fake.last().loggedOut).toBe(true)
     expect(manager.isRunning(a.id)).toBe(false)
   })

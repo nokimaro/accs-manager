@@ -7,7 +7,7 @@ import { acquireSingletonLock } from './lock.ts'
 import { createMtcuteProxyChecker } from './proxies/checker.ts'
 import { createProxyHealth } from './proxies/health.ts'
 import { syncProxyStore } from './proxies/proxy-store.ts'
-import { createAccountManager, type SessionFactory } from './accounts/manager.ts'
+import { AccountNotRunningError, createAccountManager, type SessionFactory } from './accounts/manager.ts'
 import { createCodeCollector } from './codes/collector.ts'
 import { housekeeping } from './housekeeping.ts'
 import { createNotifier } from './notify/notifier.ts'
@@ -70,8 +70,23 @@ const runtime = createWorkerRuntime(deps, {
     'proxy.sync': async () => syncProxyStore(deps, fetch, proxyStoreHooks),
     'account.sync': async ({ accountId }) => accountManager.sync(accountId),
     'account.stop': async ({ accountId, logout }) => accountManager.stop(accountId, logout),
-    'account.sessions': async ({ accountId }) => accountManager.sessions(accountId),
-    'account.terminateSession': async ({ accountId, hash }) => accountManager.terminateSession(accountId, hash),
+    'account.sessions': async ({ accountId }) => {
+      try {
+        return { sessions: await accountManager.sessions(accountId) }
+      } catch (err) {
+        if (err instanceof AccountNotRunningError) return { error: 'not_running' }
+        throw err
+      }
+    },
+    'account.terminateSession': async ({ accountId, hash }) => {
+      try {
+        await accountManager.terminateSession(accountId, hash)
+        return { ok: true }
+      } catch (err) {
+        if (err instanceof AccountNotRunningError) return { error: 'not_running' }
+        throw err
+      }
+    },
   },
   maintenance: {
     'proxies.checkDue': async () => {

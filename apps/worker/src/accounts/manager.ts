@@ -28,7 +28,8 @@ export interface AccountManager {
   startAll(): Promise<void>
   /** reload one account from the database and run it if its status says so */
   sync(accountId: string): Promise<void>
-  stop(accountId: string, logout?: boolean): Promise<void>
+  /** whether a live client was stopped, and whether it logged out first */
+  stop(accountId: string, logout?: boolean): Promise<{ stopped: boolean; loggedOut: boolean }>
   onProxyDown(proxyId: string): Promise<void>
   onProxyUp(proxyId: string): Promise<void>
   onProxyChanged(proxyId: string): Promise<void>
@@ -111,12 +112,22 @@ export function createAccountManager(deps: WorkerDeps, factory: SessionFactory, 
     retries.set(id, { attempt, timer })
   }
 
-  async function stopSession(id: string, logout = false): Promise<void> {
+  async function stopSession(id: string, logout = false): Promise<{ stopped: boolean; loggedOut: boolean }> {
     const session = running.get(id)
-    if (!session) return
+    if (!session) return { stopped: false, loggedOut: false }
     running.delete(id)
-    if (logout) await session.logOut().catch((err: unknown) => logger.warn({ err, accountId: id }, 'accounts: log out failed'))
+    let loggedOut = false
+    if (logout) {
+      loggedOut = await session
+        .logOut()
+        .then(() => true)
+        .catch((err: unknown) => {
+          logger.warn({ err, accountId: id }, 'accounts: log out failed')
+          return false
+        })
+    }
     await session.stop().catch((err: unknown) => logger.warn({ err, accountId: id }, 'accounts: stop failed'))
+    return { stopped: true, loggedOut }
   }
 
   async function handleError(id: string, err: unknown): Promise<void> {
@@ -232,7 +243,7 @@ export function createAccountManager(deps: WorkerDeps, factory: SessionFactory, 
     },
     async stop(accountId, logout = false) {
       clearRetry(accountId)
-      await stopSession(accountId, logout)
+      return stopSession(accountId, logout)
     },
     async onProxyDown(proxyId) {
       for (const account of await accountsOnProxy(proxyId)) {
