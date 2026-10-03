@@ -1,5 +1,5 @@
 import { infiniteQueryOptions, queryOptions } from '@tanstack/react-query'
-import type { AccountDto, AccountSessionDto, AccountStatus, CodeDto } from '@workspace/shared/accounts'
+import type { AccountDto, AccountSessionDto, AccountStatus, CloudPasswordInfoDto, CodeDto } from '@workspace/shared/accounts'
 import type { ProxyDto } from '@workspace/shared/proxies'
 import { api } from './api'
 
@@ -21,6 +21,17 @@ export const accountSessionsQueryOptions = (id: string) =>
     queryFn: ({ signal }) => api<{ items: AccountSessionDto[] }>(`/accounts/${id}/sessions`, { signal }),
     retry: false,
   })
+
+/** Asks the worker (and Telegram) about the account's cloud password. */
+export const cloudPasswordInfoQueryOptions = (id: string) =>
+  queryOptions({
+    queryKey: ['accounts', id, 'cloud-password'] as const,
+    queryFn: ({ signal }) => api<CloudPasswordInfoDto>(`/accounts/${id}/cloud-password/info`, { signal }),
+    retry: false,
+  })
+
+/** Live per-account data the worker fetches from Telegram on demand: not refetched on every account event. */
+export const ON_DEMAND_ACCOUNT_QUERIES = ['sessions', 'cloud-password']
 
 export const codesQueryOptions = (accountId?: string) =>
   queryOptions({

@@ -12,6 +12,7 @@ import { AccountNotesForm } from '@/components/accounts/account-notes-form'
 import { AccountRouteForm } from '@/components/accounts/account-route-form'
 import { AccountSessions } from '@/components/accounts/account-sessions'
 import { AccountStatusBadge } from '@/components/accounts/account-status-badge'
+import { CloudPasswordCard } from '@/components/accounts/cloud-password-card'
 import { DeleteAccountDialog } from '@/components/accounts/delete-account-dialog'
 import { CodesTable } from '@/components/codes/codes-table'
 import { PageHeader } from '@/components/page-header'
@@ -181,6 +182,15 @@ function AccountPage() {
           </Card>
         </div>
       </div>
+      <Card>
+        <CardHeader>
+          <CardTitle>Облачный пароль</CardTitle>
+          <CardDescription>Пароль двухэтапной проверки: состояние от Telegram, сам пароль — если панель его знает.</CardDescription>
+        </CardHeader>
+        <CardContent>
+          <CloudPasswordCard key={a.id} account={a} />
+        </CardContent>
+      </Card>
       <Card>
         <CardHeader>
           <CardTitle>Активные сессии</CardTitle>
