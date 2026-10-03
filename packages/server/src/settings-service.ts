@@ -47,6 +47,7 @@ export class SettingsService {
   #entries = new Map<SettingKey, Entry>()
   readonly #listeners = new Map<SettingKey, Set<Listener>>()
   #unsubscribe: (() => void) | undefined
+  #reloadChain: Promise<void> = Promise.resolve()
 
   private constructor(db: Db, cipher: Cipher, bus: EventBus, logger: Logger | undefined) {
     this.#db = db
@@ -57,11 +58,12 @@ export class SettingsService {
 
   static async create(options: { db: Db; cipher: Cipher; bus: EventBus; logger?: Logger }): Promise<SettingsService> {
     const service = new SettingsService(options.db, options.cipher, options.bus, options.logger)
-    await service.reload()
+    // subscribe before the first load so a change published in between is not lost
     service.#unsubscribe = options.bus.subscribe((event) => {
       if (event.type !== 'settings.changed') return
       service.reload().catch((err: unknown) => service.#logger?.error({ err }, 'settings: reload failed'))
     })
+    await service.reload()
     return service
   }
 
@@ -120,12 +122,21 @@ export class SettingsService {
       }
     })
 
-    await this.reload()
-    await this.#bus.publish({ type: 'settings.changed', keys: diff.map((d) => d.key), by: by.adminId })
+    // the write is committed: a failing local reload or broadcast must not turn it into an error
+    try {
+      await this.reload()
+    } catch (err) {
+      this.#logger?.error({ err }, 'settings: reload after update failed')
+    }
+    try {
+      await this.#bus.publish({ type: 'settings.changed', keys: diff.map((d) => d.key), by: by.adminId })
+    } catch (err) {
+      this.#logger?.error({ err }, 'settings: publish failed; other processes reload on the next change')
+    }
     return { ok: true, diff }
   }
 
-  async reload(): Promise<void> {
+  async #load(): Promise<void> {
     const rows = await this.#db.select().from(settingsTable)
     const next = new Map<SettingKey, Entry>()
     for (const row of rows) {
@@ -148,6 +159,13 @@ export class SettingsService {
         }
       }
     }
+  }
+
+  /** Reloads are serialized: overlapping calls (own update + bus echo) apply in order, never stale over fresh. */
+  reload(): Promise<void> {
+    const run = this.#reloadChain.then(() => this.#load())
+    this.#reloadChain = run.catch(() => undefined)
+    return run
   }
 
   close(): void {

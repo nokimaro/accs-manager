@@ -101,4 +101,18 @@ describe('SettingsService', () => {
     await vi.waitFor(() => expect(reader.get('proxy.checkInterval')).toBe('10m'))
     expect(listener).toHaveBeenCalledWith('10m', '5m')
   })
+
+  it('keeps a committed update even when broadcasting fails', async () => {
+    const failingBus: EventBus = {
+      publish: async () => {
+        throw new Error('redis down')
+      },
+      subscribe: () => () => undefined,
+      close: async () => undefined,
+    }
+    const s = await SettingsService.create({ db: t.db, cipher, bus: failingBus })
+    const r = await s.update({ 'proxy.failThreshold': 6 }, { adminId: null })
+    expect(r.ok).toBe(true)
+    expect(s.get('proxy.failThreshold')).toBe(6)
+  })
 })
