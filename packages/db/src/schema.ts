@@ -164,6 +164,11 @@ export const accounts = pgTable(
     sessionImportEnc: text('session_import_enc'),
     /** the account's cloud (2FA) password when the panel knows it; written by the worker after Telegram accepted it */
     cloudPasswordEnc: text('cloud_password_enc'),
+    /**
+     * a password set together with a new recovery email: Telegram may apply it only once the email is confirmed,
+     * so it waits here until Telegram accepts it (then it becomes cloud_password_enc)
+     */
+    cloudPasswordPendingEnc: text('cloud_password_pending_enc'),
     createdAt: createdAt(),
     updatedAt: updatedAt(),
   },

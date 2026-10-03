@@ -66,14 +66,19 @@ export class FakeSession implements TelegramSession {
     this.rejectStart?.(new Error('Session is reset'))
   })
 
-  /** the account's cloud password as Telegram keeps it; the recovery email waits for code 424242 */
+  /**
+   * The account's cloud password as Telegram keeps it; a new recovery email waits for code 424242. By default a
+   * password set together with an email applies only once the email is confirmed (TDLib's documented behaviour);
+   * `applyBeforeEmailConfirmed` models the other reading.
+   */
   twoFa = {
     password: null as string | null,
     hint: null as string | null,
     email: null as string | null,
-    pending: null as { email: string; code: string } | null,
+    pending: null as { email: string; code: string; password: string; hint: string | null } | null,
     pendingResetAt: null as Date | null,
     tooFreshSec: 0,
+    applyBeforeEmailConfirmed: false,
   }
   passwordState = vi.fn(
     async (): Promise<PasswordState> => ({
@@ -92,15 +97,19 @@ export class FakeSession implements TelegramSession {
     if (this.twoFa.tooFreshSec) throw Object.assign(rpcError(400, 'SESSION_TOO_FRESH_%d'), { seconds: this.twoFa.tooFreshSec })
     if (this.twoFa.password !== null && p.current !== this.twoFa.password) throw rpcError(400, 'PASSWORD_HASH_INVALID')
     if (p.email !== null && !p.email.includes('@')) throw rpcError(400, 'EMAIL_INVALID')
-    this.twoFa.password = p.next
-    this.twoFa.hint = p.hint
+    if (p.email === null || this.twoFa.applyBeforeEmailConfirmed) {
+      this.twoFa.password = p.next
+      this.twoFa.hint = p.hint
+    }
     if (p.email === null) return null
-    this.twoFa.pending = { email: p.email, code: '424242' }
+    this.twoFa.pending = { email: p.email, code: '424242', password: p.next, hint: p.hint }
     return { emailCodeLength: 6, emailPattern: 'm***@example.com' }
   })
   confirmPasswordEmail = vi.fn(async (code: string) => {
     if (!this.twoFa.pending || code !== this.twoFa.pending.code) throw rpcError(400, 'CODE_INVALID')
     this.twoFa.email = this.twoFa.pending.email
+    this.twoFa.password = this.twoFa.pending.password
+    this.twoFa.hint = this.twoFa.pending.hint
     this.twoFa.pending = null
   })
   resendPasswordEmail = vi.fn(async () => {})

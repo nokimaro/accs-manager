@@ -148,7 +148,8 @@ export function createMtcuteSession(options: MtcuteSessionOptions): TelegramSess
         })
         return null
       } catch (err) {
-        // the password is set; the recovery email waits for the code (EMAIL_UNCONFIRMED_<code length>)
+        // the recovery email waits for its code (EMAIL_UNCONFIRMED_<code length>); whether the new password is in force
+        // already or only after the confirmation is Telegram's call — the caller checks which one works
         if (!tl.RpcError.is(err, 'EMAIL_UNCONFIRMED_%d')) throw err
         const length = /EMAIL_UNCONFIRMED_(\d+)/.exec(err.message)?.[1]
         const after = await client.call({ _: 'account.getPassword' })

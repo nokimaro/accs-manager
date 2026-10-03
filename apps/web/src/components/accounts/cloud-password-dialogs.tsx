@@ -189,7 +189,7 @@ export function EmailCodeDialog({ accountId, step, open, onOpenChange, onChanged
         toast.add({ title: 'Письмо отправлено ещё раз' })
         return
       }
-      toast.add({ title: action === 'confirm' ? 'Почта подтверждена' : 'Почта не привязана — пароль сохранён' })
+      toast.add({ title: action === 'confirm' ? 'Почта подтверждена' : 'Почта не привязана' })
       onChanged()
       close(false)
     },
@@ -214,7 +214,8 @@ export function EmailCodeDialog({ accountId, step, open, onOpenChange, onChanged
           <DialogHeader>
             <DialogTitle>Код из письма</DialogTitle>
             <DialogDescription>
-              Пароль уже действует. Telegram отправил код на {step?.pattern ?? 'почту для восстановления'} — введите его, чтобы привязать почту.
+              Telegram отправил код на {step?.pattern ?? 'почту для восстановления'}. Введите его, чтобы привязать почту и завершить настройку
+              пароля; что действует сейчас, карточка покажет после подтверждения или пропуска.
             </DialogDescription>
           </DialogHeader>
           <Field data-invalid={act.error ? true : undefined}>

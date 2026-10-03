@@ -89,7 +89,7 @@ export function CloudPasswordCard({ account }: { account: AccountDto }) {
             )}
           </Row>
         )}
-        {s.hasPassword && (
+        {(s.hasPassword || s.unconfirmedEmailPattern) && (
           <Row label="Почта восстановления">
             <span className="flex flex-col gap-1">
               <span>{s.recoveryEmail ?? (s.hasRecovery ? 'привязана' : 'не привязана')}</span>

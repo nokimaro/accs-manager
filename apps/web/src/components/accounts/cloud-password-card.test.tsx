@@ -156,8 +156,8 @@ describe('CloudPasswordCard', () => {
     expect(calls(`POST ${base}/email`)).toEqual([{ action: 'confirm', code: '000000' }, { action: 'resend' }, { action: 'confirm', code: '424242' }])
   })
 
-  it('offers to finish a recovery email that still waits for its code', async () => {
-    const { calls } = api({ info: info({ hasPassword: true, known: true, unconfirmedEmailPattern: 'm***@example.com' }) })
+  it('offers to finish a recovery email that still waits for its code, even before the password is in force', async () => {
+    const { calls } = api({ info: info({ hasPassword: false, unconfirmedEmailPattern: 'm***@example.com' }) })
     const user = userEvent.setup()
     renderWithClient(<CloudPasswordCard account={account} />)
     expect(await screen.findByText('ожидает подтверждения: m***@example.com')).toBeInTheDocument()

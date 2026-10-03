@@ -30,11 +30,11 @@ async function connected(script: (s: FakeSession) => void = () => {}, stored: st
   const manager = createAccountManager(w.deps, fake.factory, {}, { jitterMs: 0 })
   await manager.sync(a!.id)
   const service = createCloudPassword(w.deps, manager.runningSession)
-  const storedNow = async () => {
-    const [row] = await w.t.db.select({ v: accounts.cloudPasswordEnc }).from(accounts).where(eq(accounts.id, a!.id))
+  const read = async (column: 'cloudPasswordEnc' | 'cloudPasswordPendingEnc') => {
+    const [row] = await w.t.db.select({ v: accounts[column] }).from(accounts).where(eq(accounts.id, a!.id))
     return row!.v ? w.deps.cipher.decrypt(row!.v) : null
   }
-  return { id: a!.id, session: fake.last(), manager, service, storedNow }
+  return { id: a!.id, session: fake.last(), manager, service, storedNow: () => read('cloudPasswordEnc'), pendingNow: () => read('cloudPasswordPendingEnc') }
 }
 
 describe('cloud password', () => {
@@ -99,24 +99,50 @@ describe('cloud password', () => {
     await a.manager.stopAll()
   })
 
-  it('asks for the code from the recovery email; confirms, resends or drops it', async () => {
+  it('holds a password set with a recovery email as pending until Telegram applies it; confirms, resends or drops the email', async () => {
     const a = await connected()
     expect(await a.service.set(a.id, { currentPasswordEnc: null, newPasswordEnc: enc('p'), hint: null, email: 'not-an-email' })).toEqual({ error: 'email_invalid' })
     expect(await a.service.set(a.id, { currentPasswordEnc: null, newPasswordEnc: enc('p'), hint: null, email: 'me@example.com' })).toEqual({
       emailCodeNeeded: { pattern: 'm***@example.com', length: 6 },
     })
-    // the new password is in force already: the panel keeps it
-    expect(await a.storedNow()).toBe('p')
+    expect([await a.storedNow(), await a.pendingNow()]).toEqual([null, 'p'])
+    // reading the state while the email waits does not lose the pending password
+    expect(await a.service.info(a.id)).toMatchObject({ info: { hasPassword: false, known: false, unconfirmedEmailPattern: 'm***@example.com' } })
+    expect(await a.pendingNow()).toBe('p')
     expect(await a.service.email(a.id, 'confirm', enc('000000'))).toEqual({ error: 'code_invalid' })
     expect(await a.service.email(a.id, 'resend', null)).toEqual({ ok: true })
     expect(await a.service.email(a.id, 'confirm', enc('424242'))).toEqual({ ok: true })
-    expect(await a.service.info(a.id)).toMatchObject({ info: { known: true, hasRecovery: true, recoveryEmail: 'me@example.com' } })
+    expect([await a.storedNow(), await a.pendingNow()]).toEqual(['p', null])
+    expect(await a.service.info(a.id)).toMatchObject({ info: { hasPassword: true, known: true, hasRecovery: true, recoveryEmail: 'me@example.com' } })
 
+    // skipping the email: Telegram keeps the old state, and so does the panel
     const b = await connected()
     await b.service.set(b.id, { currentPasswordEnc: null, newPasswordEnc: enc('p'), hint: null, email: 'me@example.com' })
     expect(await b.service.email(b.id, 'cancel', null)).toEqual({ ok: true })
-    expect(await b.service.info(b.id)).toMatchObject({ info: { hasPassword: true, hasRecovery: false, unconfirmedEmailPattern: null } })
+    expect([await b.storedNow(), await b.pendingNow()]).toEqual([null, null])
+    expect(await b.service.info(b.id)).toMatchObject({ info: { hasPassword: false, hasRecovery: false, unconfirmedEmailPattern: null } })
     await a.manager.stopAll()
     await b.manager.stopAll()
+  })
+
+  it('keeps the stored password while a change with a new email waits, then takes the new one', async () => {
+    const a = await connected((s) => Object.assign(s.twoFa, { password: 'old' }), 'old')
+    expect(await a.service.set(a.id, { currentPasswordEnc: null, newPasswordEnc: enc('new'), hint: null, email: 'me@example.com' })).toMatchObject({ emailCodeNeeded: {} })
+    expect(await a.service.info(a.id)).toMatchObject({ info: { known: true } })
+    expect([await a.storedNow(), await a.pendingNow()]).toEqual(['old', 'new'])
+    expect(await a.service.email(a.id, 'confirm', enc('424242'))).toEqual({ ok: true })
+    expect([await a.storedNow(), await a.pendingNow()]).toEqual(['new', null])
+    await a.manager.stopAll()
+  })
+
+  it('also works when Telegram applies the password before the email is confirmed', async () => {
+    const a = await connected((s) => (s.twoFa.applyBeforeEmailConfirmed = true))
+    await a.service.set(a.id, { currentPasswordEnc: null, newPasswordEnc: enc('p'), hint: null, email: 'me@example.com' })
+    // the state shows what Telegram applied: the pending password is the stored one now
+    expect(await a.service.info(a.id)).toMatchObject({ info: { hasPassword: true, known: true } })
+    expect([await a.storedNow(), await a.pendingNow()]).toEqual(['p', null])
+    expect(await a.service.email(a.id, 'cancel', null)).toEqual({ ok: true })
+    expect(await a.storedNow()).toBe('p')
+    await a.manager.stopAll()
   })
 })
