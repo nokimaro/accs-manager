@@ -30,7 +30,10 @@ RUN --mount=type=cache,id=pnpm,target=/pnpm/store pnpm install --frozen-lockfile
 
 # ---- runtime: Node runs the TypeScript sources directly (type stripping) ----
 FROM node:26-trixie-slim AS api
-ENV NODE_ENV=production
+# commit the image was built from; /api/healthz reports it so CI can confirm a deploy
+ARG GIT_SHA=dev
+ENV NODE_ENV=production APP_VERSION=$GIT_SHA
+LABEL org.opencontainers.image.source=https://github.com/nokimaro/accs-manager
 WORKDIR /app
 COPY --from=api-deps --chown=node:node /app ./
 COPY --chown=node:node packages/shared/src packages/shared/src

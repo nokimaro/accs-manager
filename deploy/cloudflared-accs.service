@@ -1,0 +1,19 @@
+# Cloudflare Tunnel for panel.159.team — installed as /etc/systemd/system/cloudflared-accs.service.
+# Same pattern as p2c-pgon on this box: its own named tunnel and unit, so restarting it never
+# touches the other tunnels, and the ingress rules live in git (cloudflared-accs.yml).
+[Unit]
+Description=Cloudflare Tunnel (accs-manager panel)
+After=network-online.target
+Wants=network-online.target
+StartLimitIntervalSec=0
+
+[Service]
+Type=notify
+ExecStart=/usr/local/bin/cloudflared --no-autoupdate --config /etc/cloudflared/accs-manager.yml tunnel run
+# a clean exit must not leave the panel offline
+Restart=always
+RestartSec=5
+User=root
+
+[Install]
+WantedBy=multi-user.target

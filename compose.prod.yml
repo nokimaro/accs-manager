@@ -1,0 +1,21 @@
+# Server override: run the image CI published for the deployed commit instead of building, and rotate logs.
+#   deploy/deploy.sh: docker compose -f compose.yml -f compose.prod.yml --env-file /opt/accs-manager/.env up -d
+x-logging: &logging
+  driver: json-file
+  options:
+    max-size: 10m
+    max-file: "5"
+
+services:
+  accs-postgres:
+    logging: *logging
+  accs-redis:
+    logging: *logging
+  accs-migrate:
+    image: ${ACCS_IMAGE:?ACCS_IMAGE is set by deploy.sh}
+    build: !reset null
+    logging: *logging
+  accs-api:
+    image: ${ACCS_IMAGE:?ACCS_IMAGE is set by deploy.sh}
+    build: !reset null
+    logging: *logging

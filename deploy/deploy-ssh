@@ -1,0 +1,26 @@
+#!/usr/bin/env bash
+# SSH forced command of the CI deploy key (installed as /usr/local/bin/accs-deploy-ssh, owned by root).
+# The only thing that key can do: `deploy <40-char sha>` for a commit that is on origin/main.
+# An optional registry token arrives on stdin (short-lived GITHUB_TOKEN of the CI job).
+set -euo pipefail
+
+read -r verb sha extra <<<"${SSH_ORIGINAL_COMMAND:-}"
+if [[ ${verb:-} != deploy || ! ${sha:-} =~ ^[0-9a-f]{40}$ || -n ${extra:-} ]]; then
+  echo 'usage: deploy <40-char commit sha>' >&2
+  exit 2
+fi
+
+repo=/opt/accs-manager/repo
+git -C "$repo" fetch --quiet origin main
+if ! git -C "$repo" merge-base --is-ancestor "$sha" origin/main; then
+  echo "refusing: $sha is not on origin/main" >&2
+  exit 3
+fi
+git -C "$repo" -c advice.detachedHead=false checkout --quiet --force "$sha"
+
+if IFS= read -r -t 5 token && [[ -n $token ]]; then
+  printf '%s' "$token" | docker login ghcr.io --username accs-deploy --password-stdin >/dev/null
+  trap 'docker logout ghcr.io >/dev/null 2>&1 || true' EXIT
+fi
+
+"$repo/deploy/deploy.sh" "$sha"

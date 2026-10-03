@@ -19,6 +19,9 @@ pnpm dev                             # api :3000 (watch), web :5173 (Vite, пр�
 
 ## Запуск на сервере
 
+Прод: `https://panel.159.team`, автодеплой при пуше в `main` — см. [`deploy/README.md`](deploy/README.md).
+Ниже — ручной запуск на любом сервере.
+
 ```bash
 cp .env.example .env                 # POSTGRES_PASSWORD, APP_ENCRYPTION_KEY, PUBLIC_ORIGIN (https://...), TRUST_PROXY=true за reverse proxy
 docker compose up -d --build

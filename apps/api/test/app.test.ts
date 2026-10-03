@@ -13,7 +13,16 @@ describe('app shell', () => {
   it('reports health of Postgres and Redis', async () => {
     const res = await send(ta.app, '/api/healthz')
     expect(res.status).toBe(200)
-    expect(await res.json()).toEqual({ ok: true })
+    expect(await res.json()).toEqual({ ok: true, version: 'dev' })
+  })
+
+  it('reports the deployed version baked into the image', async () => {
+    const versioned = await setupApp({ APP_VERSION: 'abc1234' })
+    try {
+      expect(await (await send(versioned.app, '/api/healthz')).json()).toEqual({ ok: true, version: 'abc1234' })
+    } finally {
+      await versioned.close()
+    }
   })
 
   it('sends security headers and no-store on API responses, but leaves HSTS to the reverse proxy', async () => {

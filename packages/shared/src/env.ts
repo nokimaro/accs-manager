@@ -14,6 +14,8 @@ export const envSchema = z.object({
   PUBLIC_ORIGIN: z.url({ protocol: /^https?$/ }),
   TRUST_PROXY: z.stringbool().default(false),
   LOG_LEVEL: z.enum(['fatal', 'error', 'warn', 'info', 'debug', 'trace']).default('info'),
+  /** Git sha baked into the image at build time (not an .env setting); /api/healthz reports it. */
+  APP_VERSION: z.string().min(1).default('dev'),
 })
 
 export type Env = z.output<typeof envSchema>
