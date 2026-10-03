@@ -4,8 +4,10 @@ import { Hono } from 'hono'
 import { HTTPException } from 'hono/http-exception'
 import type { AppDeps, AppEnv } from './deps.ts'
 import { resolveClientIp } from './lib/client-ip.ts'
+import { auditTrail } from './middleware/audit.ts'
 import { requireAuth, sessionLoader } from './middleware/auth.ts'
 import { originGuard } from './middleware/origin.ts'
+import { auditRoutes } from './routes/audit.ts'
 import { authRoutes } from './routes/auth.ts'
 import { healthRoutes } from './routes/health.ts'
 
@@ -19,10 +21,11 @@ export function createApp(deps: AppDeps): Hono<AppEnv> {
   })
 
   const api = new Hono<AppEnv>()
-  api.use('*', originGuard, sessionLoader)
+  api.use('*', originGuard, sessionLoader, auditTrail)
   api.route('/', healthRoutes)
   api.route('/', authRoutes)
   api.use('*', requireAuth)
+  api.route('/', auditRoutes)
   api.all('*', (c) => c.json({ error: 'not_found' }, 404))
   app.route('/api', api)
 
