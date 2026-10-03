@@ -19,6 +19,7 @@ import { eventRoutes } from './routes/events.ts'
 import { healthRoutes } from './routes/health.ts'
 import { importRoutes } from './routes/imports.ts'
 import { proxyRoutes } from './routes/proxies.ts'
+import { cloudPasswordRoutes } from './routes/cloud-password.ts'
 import { phoneLoginRoutes } from './routes/phone-login.ts'
 import { qrRoutes } from './routes/qr.ts'
 import { settingsRoutes } from './routes/settings.ts'
@@ -73,6 +74,7 @@ export function createApp(deps: AppDeps): Hono<AppEnv> {
   api.route('/', accountRoutes)
   api.route('/', qrRoutes)
   api.route('/', phoneLoginRoutes)
+  api.route('/', cloudPasswordRoutes)
   api.route('/', codeRoutes)
   api.route('/', auditRoutes)
   api.route('/', eventRoutes)
