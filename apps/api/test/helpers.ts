@@ -1,6 +1,7 @@
 import { randomBytes, randomUUID } from 'node:crypto'
 import { createTestDatabase, type TestDatabase } from '@workspace/db/testing'
-import { createEventBus, createLogger, createRedis, SettingsService, type EventBus, type Redis } from '@workspace/server'
+import { createEventBus, createLogger, createRedis, SettingsService, type CommandClient, type EventBus, type Redis } from '@workspace/server'
+import type { WorkerCommand } from '@workspace/shared/commands'
 import { createCipher } from '@workspace/shared/crypto'
 import { loadEnv, type Env } from '@workspace/shared/env'
 import { inject } from 'vitest'
@@ -15,7 +16,25 @@ export interface TestApp {
   deps: AppDeps
   t: TestDatabase
   bus: EventBus
+  commands: FakeCommands
   close(): Promise<void>
+}
+
+/** Records what the api asks the worker; `respond` answers `call()` like the worker would. */
+export class FakeCommands implements CommandClient {
+  sent: WorkerCommand[] = []
+  respond: (command: WorkerCommand) => unknown = () => null
+
+  async send(command: WorkerCommand): Promise<void> {
+    this.sent.push(command)
+  }
+
+  async call<T>(command: WorkerCommand): Promise<T> {
+    this.sent.push(command)
+    return (await this.respond(command)) as T
+  }
+
+  async close(): Promise<void> {}
 }
 
 export async function setupApp(envOverrides: Record<string, string> = {}): Promise<TestApp> {
@@ -33,12 +52,15 @@ export async function setupApp(envOverrides: Record<string, string> = {}): Promi
     ...envOverrides,
   })
   const settings = await SettingsService.create({ db: t.db, cipher: createCipher(env.APP_ENCRYPTION_KEY), bus })
-  const deps: AppDeps = { env, db: t.db, redis, bus, settings, logger: createLogger({ level: 'silent' }) }
+  const cipher = createCipher(env.APP_ENCRYPTION_KEY)
+  const commands = new FakeCommands()
+  const deps: AppDeps = { env, db: t.db, redis, bus, settings, cipher, commands, logger: createLogger({ level: 'silent' }) }
   return {
     app: createApp(deps),
     deps,
     t,
     bus,
+    commands,
     async close() {
       settings.close()
       await bus.close()

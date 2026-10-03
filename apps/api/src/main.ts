@@ -1,7 +1,7 @@
 import { fileURLToPath } from 'node:url'
 import { serve } from '@hono/node-server'
 import { createDb } from '@workspace/db'
-import { createEventBus, createLogger, createRedis, exitOnFatalErrors, SettingsService } from '@workspace/server'
+import { createCommandClient, createEventBus, createLogger, createRedis, exitOnFatalErrors, SettingsService } from '@workspace/server'
 import { createCipher } from '@workspace/shared/crypto'
 import { loadEnv } from '@workspace/shared/env'
 import { createApp } from './app.ts'
@@ -14,7 +14,10 @@ const database = createDb(env.DATABASE_URL, { onError: (err) => logger.warn({ er
 const redis = createRedis(env.REDIS_URL, 'api', logger)
 const subscriber = createRedis(env.REDIS_URL, 'api-sub', logger)
 const bus = await createEventBus({ publisher: redis, subscriber, logger })
-const settings = await SettingsService.create({ db: database.db, cipher: createCipher(env.APP_ENCRYPTION_KEY), bus, logger })
+const cipher = createCipher(env.APP_ENCRYPTION_KEY)
+const settings = await SettingsService.create({ db: database.db, cipher, bus, logger })
+const queueRedis = createRedis(env.REDIS_URL, 'api-queues', logger, { forQueues: true })
+const commands = createCommandClient(queueRedis)
 
 const app = createApp({
   env,
@@ -22,6 +25,8 @@ const app = createApp({
   redis,
   bus,
   settings,
+  cipher,
+  commands,
   logger,
   webDistDir: fileURLToPath(new URL('../../web/dist', import.meta.url)),
 })
@@ -45,11 +50,12 @@ async function shutdown(signal: string): Promise<void> {
       }, 3_000).unref()
     })
     settings.close()
+    await commands.close()
     await bus.close()
   } catch (err) {
     logger.error({ err }, 'api: error during shutdown')
   } finally {
-    await Promise.allSettled([redis.quit(), subscriber.quit(), database.close()])
+    await Promise.allSettled([redis.quit(), subscriber.quit(), queueRedis.quit(), database.close()])
     process.exit(0)
   }
 }

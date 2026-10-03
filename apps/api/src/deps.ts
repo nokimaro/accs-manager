@@ -1,5 +1,6 @@
 import type { Db } from '@workspace/db'
-import type { EventBus, Logger, Redis, SettingsService } from '@workspace/server'
+import type { CommandClient, EventBus, Logger, Redis, SettingsService } from '@workspace/server'
+import type { Cipher } from '@workspace/shared/crypto'
 import type { Env } from '@workspace/shared/env'
 
 export interface AppDeps {
@@ -9,6 +10,10 @@ export interface AppDeps {
   redis: Redis
   bus: EventBus
   settings: SettingsService
+  /** encrypts proxy passwords and imported sessions with APP_ENCRYPTION_KEY */
+  cipher: Cipher
+  /** asks the worker to act (check a proxy, start an account, list sessions) */
+  commands: CommandClient
   logger: Logger
   /** absolute path to the built SPA; static serving is skipped when undefined */
   webDistDir?: string

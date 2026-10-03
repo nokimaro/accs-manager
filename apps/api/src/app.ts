@@ -8,13 +8,16 @@ import type { AppDeps, AppEnv } from './deps.ts'
 import { resolveClientIp } from './lib/client-ip.ts'
 import { auditTrail } from './middleware/audit.ts'
 import { requireAuth, sessionLoader } from './middleware/auth.ts'
+import { DomainError } from './lib/errors.ts'
 import { originGuard } from './middleware/origin.ts'
 import { adminRoutes } from './routes/admins.ts'
 import { auditRoutes } from './routes/audit.ts'
 import { authRoutes } from './routes/auth.ts'
 import { eventRoutes } from './routes/events.ts'
 import { healthRoutes } from './routes/health.ts'
+import { proxyRoutes } from './routes/proxies.ts'
 import { settingsRoutes } from './routes/settings.ts'
+import { WorkerTimeoutError } from '@workspace/server'
 import { AdminError } from './services/admins.ts'
 
 /** Global cap on request bodies; plan-3 upload routes must be excluded and get their own route-level limit (import.maxZipSizeMb). */
@@ -58,6 +61,7 @@ export function createApp(deps: AppDeps): Hono<AppEnv> {
   api.use('*', requireAuth)
   api.route('/', adminRoutes)
   api.route('/', settingsRoutes)
+  api.route('/', proxyRoutes)
   api.route('/', auditRoutes)
   api.route('/', eventRoutes)
   api.all('*', (c) => c.json({ error: 'not_found' }, 404))
@@ -73,6 +77,8 @@ export function createApp(deps: AppDeps): Hono<AppEnv> {
       const [status, message] = ADMIN_ERRORS[err.code]
       return c.json({ error: err.code, message }, status)
     }
+    if (err instanceof DomainError) return c.json({ error: err.code, message: err.message }, err.status)
+    if (err instanceof WorkerTimeoutError) return c.json({ error: 'worker_timeout', message: 'Воркер не ответил вовремя — попробуйте ещё раз' }, 504)
     if (err instanceof HTTPException) return err.getResponse()
     deps.logger.error({ err, path: c.req.path }, 'unhandled error')
     return c.json({ error: 'internal', message: 'Внутренняя ошибка' }, 500)
