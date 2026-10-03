@@ -131,8 +131,12 @@ async function run(argv: string[]): Promise<void> {
         let value: unknown = null
         if (command === 'settings:set') {
           if (values['value-stdin']) value = await readStdin()
-          else if (rawValue !== undefined) value = parseValue(rawValue)
-          else throw new CliError('value is required')
+          else if (rawValue !== undefined) {
+            if (isSettingKey(key) && settingsDef[key].meta.type === 'secret') {
+              throw new CliError('secret values must be passed via --value-stdin, never as an argument')
+            }
+            value = parseValue(rawValue)
+          } else throw new CliError('value is required')
         }
         await withSettings(env, database, async (settings) => {
           const result = await settings.update({ [key]: value }, { adminId: null })
