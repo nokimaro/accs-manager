@@ -41,4 +41,11 @@ describe('schema', () => {
     const [row] = await t.db.select().from(settings).where(eq(settings.key, 'k'))
     expect(row?.value).toEqual([1, 2])
   })
+
+  it('reads jsonb strings back as strings, even when they look like JSON', async () => {
+    const values = ['-1001234567890', '0.25', 'true', 'null', '10m']
+    await t.db.insert(settings).values(values.map((v) => ({ key: `str:${v}`, value: v })))
+    const rows = await t.db.select().from(settings)
+    expect(values.map((v) => rows.find((r) => r.key === `str:${v}`)?.value)).toEqual(values)
+  })
 })

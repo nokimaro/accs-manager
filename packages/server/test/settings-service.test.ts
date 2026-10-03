@@ -64,6 +64,13 @@ describe('SettingsService', () => {
     expect(s.snapshot()['notify.botToken']).toMatchObject({ value: null, isSet: true, overridden: true })
   })
 
+  it('keeps string values that look like numbers (channel ids)', async () => {
+    const s = await makeService()
+    await s.update({ 'notify.chatId': '-1001234567890' }, { adminId: null })
+    expect(s.get('notify.chatId')).toBe('-1001234567890')
+    expect((await makeService()).get('notify.chatId')).toBe('-1001234567890')
+  })
+
   it('null removes the override', async () => {
     const s = await makeService()
     await s.update({ 'proxy.failThreshold': 7, 'notify.botToken': 'x' }, { adminId: null })

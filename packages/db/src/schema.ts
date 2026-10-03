@@ -1,6 +1,17 @@
-import { bigserial, index, integer, jsonb, pgTable, text, timestamp, uniqueIndex, uuid } from 'drizzle-orm/pg-core'
+import { bigserial, customType, index, integer, pgTable, text, timestamp, uniqueIndex, uuid } from 'drizzle-orm/pg-core'
 
 const createdAt = () => timestamp('created_at', { withTimezone: true }).notNull().defaultNow()
+
+/**
+ * jsonb that returns what was stored. node-postgres already parses jsonb, and drizzle's jsonb() then
+ * JSON.parses string values once more, so a stored "-1001234567890", "0.25" or "true" came back as a
+ * number or boolean. Same SQL type, so no migration.
+ */
+const jsonb = customType<{ data: unknown; driverData: unknown }>({
+  dataType: () => 'jsonb',
+  toDriver: (value) => JSON.stringify(value),
+  fromDriver: (value) => value,
+})
 
 export const admins = pgTable(
   'admins',
@@ -40,7 +51,7 @@ export const auditLog = pgTable(
     action: text('action').notNull(),
     targetType: text('target_type'),
     targetId: text('target_id'),
-    payload: jsonb('payload').$type<unknown>(),
+    payload: jsonb('payload'),
     ip: text('ip'),
     userAgent: text('user_agent'),
     statusCode: integer('status_code'),
@@ -58,7 +69,7 @@ export const auditLog = pgTable(
 export const settings = pgTable('settings', {
   key: text('key').primaryKey(),
   /** plain JSON value, or { enc: "v1:..." } for secrets */
-  value: jsonb('value').$type<unknown>().notNull(),
+  value: jsonb('value').notNull(),
   updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
   updatedBy: uuid('updated_by').references(() => admins.id, { onDelete: 'set null' }),
 })
