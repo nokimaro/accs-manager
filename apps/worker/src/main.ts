@@ -7,7 +7,9 @@ import { acquireSingletonLock } from './lock.ts'
 import { createMtcuteProxyChecker } from './proxies/checker.ts'
 import { createProxyHealth } from './proxies/health.ts'
 import { syncProxyStore } from './proxies/proxy-store.ts'
-import { prepareMtcuteStorage } from './telegram/storage.ts'
+import { createAccountManager, type SessionFactory } from './accounts/manager.ts'
+import { createMtcuteSession } from './telegram/mtcute-session.ts'
+import { createAccountStorage, prepareMtcuteStorage } from './telegram/storage.ts'
 import { createWorkerRuntime } from './runtime.ts'
 
 const env = loadEnv()
@@ -36,26 +38,51 @@ const settings = await SettingsService.create({ db: database.db, cipher, bus, lo
 await prepareMtcuteStorage(database.pool, database.db, cipher)
 
 const deps: WorkerDeps = { env, db: database.db, pool: database.pool, redis, queueRedis, bus, settings, cipher, logger }
+/** tdata accounts keep Telegram Desktop's identity; QR accounts use the owner's own api_id */
+const sessionFactory: SessionFactory = (account, ctx) => {
+  const own = account.clientProfile === 'own'
+  const apiId = own ? settings.get('telegram.own.apiId') : settings.get('telegram.desktop.apiId')
+  const apiHash = own ? settings.get('telegram.own.apiHash') : settings.get('telegram.desktop.apiHash')
+  if (!apiId || !apiHash) throw new Error(own ? 'Не задан свой api_id / api_hash (Настройки → Telegram)' : 'Не задан Desktop api_id / api_hash')
+  return createMtcuteSession({
+    apiId,
+    apiHash,
+    device: account.device,
+    storage: createAccountStorage(database.pool, database.db, cipher, account.id),
+    proxy: ctx.proxy,
+    importSession: ctx.importSession,
+  })
+}
+const accountManager = createAccountManager(deps, sessionFactory)
+
 const proxyChecker = createMtcuteProxyChecker(() => ({ apiId: settings.get('telegram.desktop.apiId'), apiHash: settings.get('telegram.desktop.apiHash') }))
-const proxyHealth = createProxyHealth(deps, proxyChecker)
+const proxyHealth = createProxyHealth(deps, proxyChecker, { onDown: accountManager.onProxyDown, onUp: accountManager.onProxyUp })
+const proxyStoreHooks = { onChanged: accountManager.onProxyChanged, onDown: accountManager.onProxyDown }
 
 const runtime = createWorkerRuntime(deps, {
   commands: {
     'proxy.check': async ({ proxyId }) => proxyHealth.checkById(proxyId),
-    'proxy.sync': async () => syncProxyStore(deps, fetch),
+    'proxy.sync': async () => syncProxyStore(deps, fetch, proxyStoreHooks),
+    'account.sync': async ({ accountId }) => accountManager.sync(accountId),
+    'account.stop': async ({ accountId, logout }) => accountManager.stop(accountId, logout),
+    'account.sessions': async ({ accountId }) => accountManager.sessions(accountId),
+    'account.terminateSession': async ({ accountId, hash }) => accountManager.terminateSession(accountId, hash),
   },
   maintenance: {
     'proxies.checkDue': async () => {
       await proxyHealth.checkDue()
     },
     'proxies.sync': async () => {
-      await syncProxyStore(deps, fetch)
+      await syncProxyStore(deps, fetch, proxyStoreHooks)
     },
+    'accounts.refreshProfiles': async () => accountManager.refreshProfiles(),
   },
 })
 await runtime.start()
 const stopHeartbeat = startWorkerHeartbeat(redis, env.APP_VERSION)
 logger.info('worker: started')
+// connects in the background: commands and maintenance keep flowing meanwhile
+accountManager.startAll().catch((err: unknown) => logger.error({ err }, 'worker: starting accounts failed'))
 
 let stopping = false
 async function shutdown(signal: string): Promise<void> {
@@ -66,6 +93,7 @@ async function shutdown(signal: string): Promise<void> {
   setTimeout(() => process.exit(1), 25_000).unref()
   try {
     await runtime.stop()
+    await accountManager.stopAll()
     await stopHeartbeat()
     settings.close()
     await bus.close()
