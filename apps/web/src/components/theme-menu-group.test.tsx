@@ -31,22 +31,30 @@ afterEach(() => {
 describe('ThemeMenuGroup', () => {
   it('follows the system theme by default', async () => {
     await openMenu()
-    expect(screen.getByRole('menuitemradio', { name: 'Как в системе' })).toHaveAttribute('aria-checked', 'true')
+    expect(screen.getByRole('button', { name: 'Как в системе' })).toHaveAttribute('aria-pressed', 'true')
     expect(document.documentElement).toHaveClass('light')
   })
 
   it('switches to dark and remembers the choice', async () => {
     const user = await openMenu()
-    await user.click(screen.getByRole('menuitemradio', { name: 'Тёмная' }))
+    await user.click(screen.getByRole('button', { name: 'Тёмная' }))
     expect(document.documentElement).toHaveClass('dark')
     expect(document.documentElement).not.toHaveClass('light')
     expect(localStorage.getItem('theme')).toBe('dark')
+    expect(screen.getByRole('button', { name: 'Тёмная' })).toHaveAttribute('aria-pressed', 'true')
+  })
+
+  it('keeps the theme when the active icon is pressed again', async () => {
+    const user = await openMenu()
+    await user.click(screen.getByRole('button', { name: 'Как в системе' }))
+    expect(screen.getByRole('button', { name: 'Как в системе' })).toHaveAttribute('aria-pressed', 'true')
+    expect(document.documentElement).toHaveClass('light')
   })
 
   it('marks the saved theme as selected', async () => {
     localStorage.setItem('theme', 'dark')
     await openMenu()
-    expect(screen.getByRole('menuitemradio', { name: 'Тёмная' })).toHaveAttribute('aria-checked', 'true')
+    expect(screen.getByRole('button', { name: 'Тёмная' })).toHaveAttribute('aria-pressed', 'true')
     expect(document.documentElement).toHaveClass('dark')
   })
 })
