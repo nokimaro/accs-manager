@@ -6,12 +6,17 @@ import { z } from 'zod'
 import { PageHeader } from '@/components/page-header'
 import { SettingsGroupCard } from '@/components/settings/settings-group-card'
 import { settingsQueryOptions } from '@/lib/settings'
+import { pageTitle } from '@/lib/title'
 
 const groupIds = settingGroups.map((g) => g.id) as [SettingGroupId, ...SettingGroupId[]]
 
 export const Route = createFileRoute('/_authed/settings')({
   validateSearch: z.object({ group: z.enum(groupIds).optional().catch(undefined) }),
   loader: ({ context }) => context.queryClient.query({ ...settingsQueryOptions, staleTime: 'static' }),
+  head: ({ match }) => {
+    const group = settingGroups.find((g) => g.id === (match.search.group ?? 'telegram'))
+    return { meta: [{ title: pageTitle(...(group ? [group.label] : []), 'Настройки') }] }
+  },
   component: SettingsPage,
 })
 

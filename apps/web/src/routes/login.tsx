@@ -12,6 +12,7 @@ import { z } from 'zod'
 import { PasswordInput } from '@/components/password-input'
 import { api, ApiError } from '@/lib/api'
 import { authKeys, meQueryOptions } from '@/lib/auth'
+import { titleHead } from '@/lib/title'
 
 const loginSearch = z.object({
   // app-relative only — no open redirects
@@ -19,6 +20,7 @@ const loginSearch = z.object({
 })
 
 export const Route = createFileRoute('/login')({
+  head: titleHead('Вход'),
   validateSearch: loginSearch,
   beforeLoad: async ({ context, search }) => {
     const me = await context.queryClient.query({ ...meQueryOptions, staleTime: 'static' })

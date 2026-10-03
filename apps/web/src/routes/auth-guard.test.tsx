@@ -64,6 +64,7 @@ it('redirects anonymous users to /login and keeps the target', async () => {
   await waitFor(() => expect(router.state.location.pathname).toBe('/login'))
   expect(router.state.location.search).toEqual({ redirect: '/settings?group=proxy' })
   expect(await screen.findByRole('button', { name: 'Войти' })).toBeInTheDocument()
+  await waitFor(() => expect(document.title).toBe('Вход | 159.team'))
 })
 
 it('renders the shell with the active tab for signed-in admins', async () => {
@@ -72,6 +73,7 @@ it('renders the shell with the active tab for signed-in admins', async () => {
   setup('/')
   expect(await screen.findByRole('heading', { name: 'Коды' })).toBeInTheDocument()
   expect(screen.getAllByRole('tab', { name: 'Коды' })[0]).toHaveAttribute('aria-selected', 'true')
+  await waitFor(() => expect(document.title).toBe('Коды | 159.team'))
 })
 
 it('returns to /login when the session is revoked while browsing', async () => {

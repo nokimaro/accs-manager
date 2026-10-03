@@ -31,8 +31,10 @@ import { PageHeader } from '@/components/page-header'
 import { adminsQueryOptions } from '@/lib/admins'
 import { api, ApiError } from '@/lib/api'
 import { formatDateTime } from '@/lib/format'
+import { titleHead } from '@/lib/title'
 
 export const Route = createFileRoute('/_authed/admins')({
+  head: titleHead('Админы'),
   loader: ({ context }) => context.queryClient.query({ ...adminsQueryOptions, staleTime: 'static' }),
   component: AdminsPage,
 })

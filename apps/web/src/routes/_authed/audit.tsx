@@ -18,6 +18,7 @@ import { PageHeader } from '@/components/page-header'
 import { adminsQueryOptions } from '@/lib/admins'
 import { auditQueryOptions, type AuditPeriod } from '@/lib/audit'
 import { formatDateTime } from '@/lib/format'
+import { titleHead } from '@/lib/title'
 
 const defaults = { page: 1, period: '7d' as AuditPeriod }
 const auditSearch = z.object({
@@ -28,6 +29,7 @@ const auditSearch = z.object({
 })
 
 export const Route = createFileRoute('/_authed/audit')({
+  head: titleHead('Аудит'),
   validateSearch: auditSearch,
   search: { middlewares: [stripSearchParams(defaults)] },
   component: AuditPage,

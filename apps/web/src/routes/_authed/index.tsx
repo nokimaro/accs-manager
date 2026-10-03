@@ -4,8 +4,10 @@ import { Empty, EmptyContent, EmptyDescription, EmptyHeader, EmptyMedia, EmptyTi
 import { KeyRoundIcon } from 'lucide-react'
 import { PageHeader } from '@/components/page-header'
 import { SetupAlert } from '@/components/setup-alert'
+import { titleHead } from '@/lib/title'
 
 export const Route = createFileRoute('/_authed/')({
+  head: titleHead('Коды'),
   component: CodesPage,
 })
 
