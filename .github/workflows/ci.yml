@@ -42,6 +42,8 @@ jobs:
       - run: pnpm install --frozen-lockfile
       - run: pnpm lint
       - run: pnpm typecheck
+      # e2e/ and playwright.config.ts belong to no workspace package
+      - run: npx tsc -p e2e/tsconfig.json
       - run: pnpm test
 
   e2e:
@@ -79,4 +81,5 @@ jobs:
           name: e2e-report
           path: |
             playwright-report
+            test-results
             compose.log
