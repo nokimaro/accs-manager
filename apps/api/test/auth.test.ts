@@ -129,4 +129,28 @@ describe('auth', () => {
       await ta.deps.settings.update({ 'security.loginMaxAttempts': null }, { adminId: null })
     }
   })
+
+  it('does not touch the per-login counter once the IP is over its limit', async () => {
+    await ta.deps.settings.update({ 'security.loginMaxAttempts': 3 }, { adminId: null })
+    try {
+      const ip = '10.11.0.1'
+      for (let i = 0; i < 3; i++) {
+        await send(ta.app, '/api/auth/login', { body: { login: uniqueLogin(), password: 'bad password!' }, ip })
+      }
+      const victim = uniqueLogin()
+      const res = await send(ta.app, '/api/auth/login', { body: { login: victim, password: 'bad password!' }, ip })
+      expect(res.status).toBe(429)
+      expect(await ta.deps.redis.get(`rl:login:user:${victim}`)).toBeNull()
+    } finally {
+      await ta.deps.settings.update({ 'security.loginMaxAttempts': null }, { adminId: null })
+    }
+  })
+
+  it('rejects control characters in the login with 400, never 500', async () => {
+    for (const login of ['a\u0000b', 'a\nb']) {
+      const res = await send(ta.app, '/api/auth/login', { body: { login, password: 'whatever12345' }, ip: '10.11.0.2' })
+      expect(res.status).toBe(400)
+      expect(await res.json()).toMatchObject({ error: 'validation', fields: { login: expect.any(String) } })
+    }
+  })
 })

@@ -27,12 +27,17 @@ export const authRoutes = new Hono<AppEnv>()
     const windowMs = parseDuration(settings.get('security.loginWindow'))
     const ipKey = `rl:login:ip:${c.get('clientIp')}`
     const userKey = `rl:login:user:${login}`
-    // reserve the attempt atomically before the (slow) password check, so a parallel burst cannot bypass the limit
-    const [byIp, byUser] = await Promise.all([reserveAttempt(redis, ipKey, windowMs), reserveAttempt(redis, userKey, windowMs)])
-    if (byIp.count > limit || byUser.count > limit) {
-      c.header('Retry-After', String(Math.max(byIp.retryAfterSec, byUser.retryAfterSec)))
+    const tooMany = (retryAfterSec: number) => {
+      c.header('Retry-After', String(retryAfterSec))
       return c.json({ error: 'rate_limited', message: 'Слишком много попыток входа' }, 429)
     }
+    // reserve attempts atomically before the (slow) password check, so a parallel burst cannot bypass the limit;
+    // the IP first: an address already over its limit must not move (or create) per-login counters,
+    // otherwise a single client could keep any known login locked out
+    const byIp = await reserveAttempt(redis, ipKey, windowMs)
+    if (byIp.count > limit) return tooMany(byIp.retryAfterSec)
+    const byUser = await reserveAttempt(redis, userKey, windowMs)
+    if (byUser.count > limit) return tooMany(byUser.retryAfterSec)
 
     const admin = await findAdminByLogin(db, login)
     const ok = await verifyPassword(password, admin?.passwordHash ?? DUMMY_HASH)

@@ -12,7 +12,11 @@ export type ApiError = z.output<typeof apiErrorSchema>
 export const loginSchema = z.string().trim().toLowerCase().regex(/^[a-z0-9._-]{3,32}$/, 'Логин: 3–32 символа a-z, 0-9, точка, дефис, подчёркивание')
 export const passwordSchema = z.string().min(10, 'Пароль не короче 10 символов').max(256)
 
-export const loginInput = z.object({ login: z.string().trim().toLowerCase().min(1).max(64), password: z.string().min(1).max(256) })
+export const loginInput = z.object({
+  // control characters never form a valid login; a NUL would reach Postgres and fail the lookup with a 500
+  login: z.string().trim().toLowerCase().min(1).max(64).regex(/^\P{Cc}+$/u, 'Недопустимые символы в логине'),
+  password: z.string().min(1).max(256),
+})
 export type LoginInput = z.output<typeof loginInput>
 
 export const changePasswordInput = z.object({ currentPassword: z.string().min(1).max(256), newPassword: passwordSchema })

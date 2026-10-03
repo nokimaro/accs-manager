@@ -58,8 +58,11 @@ export const auditTrail = createMiddleware<AppEnv>(async (c, next) => {
   const overrides = c.get('audit')
   if (!MUTATING.has(c.req.method) && overrides.action === undefined) return
 
-  const actor: AuditActor = { type: 'admin', adminId: c.get('admin')?.id ?? overrides.adminId ?? null }
-  const payload = overrides.payload !== undefined ? overrides.payload : await readBody(c)
+  const admin = c.get('admin')
+  const actor: AuditActor = { type: 'admin', adminId: admin?.id ?? overrides.adminId ?? null }
+  // anonymous callers do not get their bodies stored (a disk-growth vector); a route that knows a safe
+  // payload sets it explicitly (login records { login })
+  const payload = overrides.payload !== undefined ? overrides.payload : admin ? await readBody(c) : null
   const { db, logger } = c.get('deps')
   const record: AuditRecord = {
     actor,

@@ -16,6 +16,15 @@ describe('app shell', () => {
     expect(await res.json()).toEqual({ ok: true })
   })
 
+  it('sends security headers and no-store on API responses, but leaves HSTS to the reverse proxy', async () => {
+    for (const res of [await send(ta.app, '/api/healthz'), await send(ta.app, '/api/auth/me')]) {
+      expect(res.headers.get('x-content-type-options')).toBe('nosniff')
+      expect(res.headers.get('x-frame-options')).toBe('SAMEORIGIN')
+      expect(res.headers.get('cache-control')).toBe('no-store')
+      expect(res.headers.has('strict-transport-security')).toBe(false)
+    }
+  })
+
   it('rejects state-changing requests from a foreign or missing Origin', async () => {
     for (const origin of [null, 'https://evil.test']) {
       const res = await send(ta.app, '/api/anything', { method: 'POST', origin })

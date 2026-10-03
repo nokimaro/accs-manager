@@ -3,6 +3,7 @@ import { serveStatic } from '@hono/node-server/serve-static'
 import { Hono } from 'hono'
 import { bodyLimit } from 'hono/body-limit'
 import { HTTPException } from 'hono/http-exception'
+import { secureHeaders } from 'hono/secure-headers'
 import type { AppDeps, AppEnv } from './deps.ts'
 import { resolveClientIp } from './lib/client-ip.ts'
 import { auditTrail } from './middleware/audit.ts'
@@ -32,6 +33,14 @@ export function createApp(deps: AppDeps): Hono<AppEnv> {
     c.set('deps', deps)
     c.set('clientIp', resolveClientIp(c, deps.env.TRUST_PROXY))
     await next()
+  })
+  // HSTS belongs to the reverse proxy: from here its includeSubDomains would also pin the owner's other subdomains.
+  // No CSP yet.
+  app.use('*', secureHeaders({ strictTransportSecurity: false }))
+  // API responses carry per-admin data: never cached by the browser or a proxy
+  app.use('/api/*', async (c, next) => {
+    await next()
+    c.res.headers.set('Cache-Control', 'no-store')
   })
 
   const api = new Hono<AppEnv>()

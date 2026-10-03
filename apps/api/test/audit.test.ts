@@ -2,14 +2,18 @@ import { auditLog } from '@workspace/db'
 import { desc, eq } from 'drizzle-orm'
 import { Hono } from 'hono'
 import { afterAll, beforeAll, describe, expect, it } from 'vitest'
-import type { AppDeps, AppEnv } from '../src/deps.ts'
+import type { AppDeps, AppEnv, SessionAdmin } from '../src/deps.ts'
 import { audited, auditTrail } from '../src/middleware/audit.ts'
 import { createAdmin } from '../src/services/admins.ts'
 import { loginAs, send, setupApp, uniqueLogin, type TestApp } from './helpers.ts'
 
 let ta: TestApp
+/** the probe routes act as this signed-in admin: bodies of anonymous requests are not stored */
+let probeAdmin: SessionAdmin
 beforeAll(async () => {
   ta = await setupApp()
+  const { id, login } = await createAdmin(ta.deps.db, { login: uniqueLogin('probe'), password: 'correct horse battery' })
+  probeAdmin = { id, login }
 })
 afterAll(async () => {
   await ta.close()
@@ -23,7 +27,7 @@ function probeApp(deps: AppDeps = ta.deps) {
   app.use('*', async (c, next) => {
     c.set('deps', deps)
     c.set('clientIp', '10.5.5.5')
-    c.set('admin', null)
+    c.set('admin', probeAdmin)
     c.set('sessionId', null)
     await next()
   })
@@ -185,5 +189,16 @@ describe('audit trail', () => {
     const before = (await lastAudit())?.id
     expect((await probeApp({ ...ta.deps, db: flakyDb }).request('/echo', { method: 'POST' })).status).toBe(200)
     expect((await lastAudit())?.id).toBe(before)
+  })
+
+  it('stores no body for anonymous mutating requests, but keeps the login route payload', async () => {
+    const ip = '10.12.0.1'
+    await send(ta.app, '/api/admins', { body: { login: 'x', password: 'y', junk: 'z'.repeat(1000) }, ip })
+    await send(ta.app, '/api/auth/login', { body: { login: 'ghost2', password: 'secret-pass-123' }, ip })
+    const rows = await ta.t.db.select().from(auditLog).where(eq(auditLog.ip, ip)).orderBy(auditLog.id)
+    expect(rows.map((r) => [r.statusCode, r.adminId, r.payload])).toEqual([
+      [401, null, null],
+      [401, null, { login: 'ghost2' }],
+    ])
   })
 })
