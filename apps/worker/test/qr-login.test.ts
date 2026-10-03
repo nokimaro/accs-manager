@@ -88,6 +88,8 @@ describe('QR login', () => {
     const [account] = await w.t.db.select().from(accounts).where(eq(accounts.tgUserId, 31337))
     expect(account).toMatchObject({ source: 'qr', clientProfile: 'own', connectionMode: 'direct', status: 'pending_check', phone: '77009998877' })
     expect(w.deps.cipher.decrypt(account!.sessionImportEnc!)).toBe('exported-session')
+    // the cloud password that let the login through is kept (encrypted) for the account card
+    expect(w.deps.cipher.decrypt(account!.cloudPasswordEnc!)).toBe('right')
     expect(onAccountCreated).toHaveBeenCalledWith(account!.id)
     // «неверный пароль» stays on screen (with the hint) until the next try — mtcute asks for the password right after
     expect(states.map((s) => (s as { state: string }).state)).toEqual(['waiting', 'scanned', 'password_needed', 'password_invalid', 'done'])
@@ -95,6 +97,14 @@ describe('QR login', () => {
     expect(states[2]).toMatchObject({ hint: 'кличка кота' })
     expect(states[3]).toMatchObject({ hint: 'кличка кота' })
     expect(destroyedAtHandOff).toEqual([true])
+  })
+
+  it('keeps no cloud password for an account without one', async () => {
+    const qrId = randomUUID()
+    const { factory } = scriptedFactory(52525)
+    await createQrLogin(w.deps, factory).run({ qrId, proxyId: null, adminId: null })
+    const [account] = await w.t.db.select().from(accounts).where(eq(accounts.tgUserId, 52525))
+    expect(account).toMatchObject({ source: 'qr', cloudPasswordEnc: null })
   })
 
   it('logs the new session out when the account is already in the panel', async () => {
@@ -108,6 +118,7 @@ describe('QR login', () => {
     off()
     expect(made[0]!.loggedOut).toBe(true)
     expect(await w.t.db.select().from(accounts)).toHaveLength(1)
+    expect(made[0]!.destroyed).toBe(true)
   })
 
   it('stops on cancel and on timeout', async () => {

@@ -1,10 +1,8 @@
-import { accounts, and, eq, isNull, proxies } from '@workspace/db'
-import { writeAudit, type Redis } from '@workspace/server'
 import type { QrState } from '@workspace/shared/accounts'
-import { qrControlChannel, qrControlSchema, type QrControl } from '@workspace/shared/commands'
+import { qrControlChannel, qrControlSchema } from '@workspace/shared/commands'
 import { parseDuration } from '@workspace/shared/duration'
 import type { WorkerDeps } from '../deps.ts'
-import type { ProxyEndpoint } from '../proxies/checker.ts'
+import { createLoginKit } from '../login/common.ts'
 import type { QrClientFactory } from './client.ts'
 
 export interface QrStart {
@@ -22,41 +20,15 @@ export interface QrLoginOptions {
 
 /**
  * Runs one QR login: publishes the QR link and progress as `qr.update` events, takes the 2FA password from a
- * Redis channel (never stored), and on success saves the account with its session for the account manager.
+ * Redis channel (never stored in Redis), and on success saves the account with its session — and the cloud
+ * password that let it through — for the account manager.
  */
 export function createQrLogin(deps: WorkerDeps, factory: QrClientFactory, options: QrLoginOptions = {}) {
-  const { db, settings, bus, logger, cipher } = deps
+  const { settings, bus, logger } = deps
+  const kit = createLoginKit(deps)
 
   const update = (qrId: string, state: QrState, extra: { url?: string; expiresAt?: string; hint?: string; accountId?: string; message?: string } = {}) =>
     bus.publish({ type: 'qr.update', qrId, state, ...extra })
-
-  async function proxyEndpoint(proxyId: string | null): Promise<ProxyEndpoint | null> {
-    if (!proxyId) return null
-    const [proxy] = await db
-      .select()
-      .from(proxies)
-      .leftJoin(accounts, eq(accounts.proxyId, proxies.id))
-      .where(and(eq(proxies.id, proxyId), isNull(proxies.disabledAt), isNull(accounts.id)))
-    if (!proxy || !['ok', 'unchecked', 'failing'].includes(proxy.proxies.status)) throw new Error('Прокси недоступен или уже занят')
-    const p = proxy.proxies
-    return { type: p.type, host: p.host, port: p.port, username: p.username, password: p.passwordEnc ? cipher.decrypt(p.passwordEnc) : null }
-  }
-
-  /** A private subscriber connection per login: the password and cancel arrive on the login's own channel. */
-  async function control(redis: Redis, qrId: string, onMessage: (message: QrControl) => void): Promise<() => Promise<void>> {
-    const sub = redis.duplicate()
-    await sub.subscribe(qrControlChannel(qrId))
-    sub.on('message', (_channel: string, raw: string) => {
-      try {
-        onMessage(qrControlSchema.parse(JSON.parse(raw)))
-      } catch {
-        // malformed control message: ignore
-      }
-    })
-    return async () => {
-      await sub.quit().catch(() => {})
-    }
-  }
 
   return {
     async run({ qrId, proxyId, adminId }: QrStart): Promise<void> {
@@ -70,7 +42,7 @@ export function createQrLogin(deps: WorkerDeps, factory: QrClientFactory, option
       const timeoutMs = options.timeoutMs ?? parseDuration(settings.get('telegram.qrTimeout'))
       const timer = setTimeout(() => abort.abort(new Error('expired')), timeoutMs)
       let passwordWaiter: ((password: string) => void) | null = null
-      const stopControl = await control(deps.redis, qrId, (message) => {
+      const stopControl = await kit.subscribe(deps.redis, qrControlChannel(qrId), qrControlSchema, (message) => {
         if (message.type === 'cancel') abort.abort(new Error('cancelled'))
         if (message.type === 'password' && passwordWaiter) {
           passwordWaiter(message.password)
@@ -80,18 +52,15 @@ export function createQrLogin(deps: WorkerDeps, factory: QrClientFactory, option
 
       let client: ReturnType<QrClientFactory> | undefined
       try {
-        const proxy = await proxyEndpoint(proxyId)
-        const device = {
-          deviceModel: settings.get('telegram.desktop.deviceModel'),
-          systemVersion: settings.get('telegram.desktop.systemVersion'),
-          appVersion: settings.get('telegram.desktop.appVersion'),
-          langCode: settings.get('telegram.desktop.langCode'),
-        }
+        const proxy = await kit.proxyEndpoint(proxyId)
+        const device = kit.device()
         client = factory({ apiId, apiHash, device, proxy })
         const qrClient = client
         let hint: string | null | undefined
         // mtcute reports a wrong password and asks again at once: keep «неверный пароль» on screen until the next try
         let passwordWasWrong = false
+        // the last password typed: signIn only returns once it was the right one
+        let cloudPassword: string | null = null
         const profile = await qrClient.signIn({
           abortSignal: abort.signal,
           onUrlUpdated: (url, expires) => void update(qrId, 'waiting', { url, expiresAt: expires.toISOString() }),
@@ -99,10 +68,12 @@ export function createQrLogin(deps: WorkerDeps, factory: QrClientFactory, option
           password: async () => {
             if (hint === undefined) hint = await qrClient.passwordHint().catch(() => null)
             if (!passwordWasWrong) await update(qrId, 'password_needed', hint ? { hint } : {})
-            return new Promise<string>((resolve, reject) => {
+            const password = await new Promise<string>((resolve, reject) => {
               passwordWaiter = resolve
               abort.signal.addEventListener('abort', () => reject(abort.signal.reason), { once: true })
             })
+            cloudPassword = password
+            return password
           },
           invalidPasswordCallback: () => {
             passwordWasWrong = true
@@ -110,40 +81,14 @@ export function createQrLogin(deps: WorkerDeps, factory: QrClientFactory, option
           },
         })
 
-        const [existing] = await db.select({ id: accounts.id }).from(accounts).where(eq(accounts.tgUserId, profile.tgUserId))
-        if (existing) {
-          // the account is already here: do not leave a second, unused session behind
-          await qrClient.logOut().catch(() => {})
-          await update(qrId, 'failed', { message: 'Этот аккаунт уже есть в панели', accountId: existing.id })
+        const result = await kit.finish({ client: qrClient, profile, source: 'qr', proxyId, adminId, cloudPassword, device })
+        client = undefined
+        if ('duplicateOf' in result) {
+          await update(qrId, 'failed', { message: 'Этот аккаунт уже есть в панели', accountId: result.duplicateOf })
           return
         }
-        const session = await qrClient.exportSession()
-        const [created] = await db
-          .insert(accounts)
-          .values({
-            tgUserId: profile.tgUserId,
-            phone: profile.phone,
-            username: profile.username,
-            firstName: profile.firstName,
-            lastName: profile.lastName,
-            isPremium: profile.isPremium,
-            dcId: profile.dcId,
-            source: 'qr',
-            clientProfile: 'own',
-            device,
-            connectionMode: proxyId ? 'proxy' : 'direct',
-            proxyId,
-            status: 'pending_check',
-            sessionImportEnc: cipher.encrypt(session),
-          })
-          .returning({ id: accounts.id })
-        await writeAudit(db, { actor: adminId ? { type: 'admin', adminId } : { type: 'system' }, action: 'account.qr.created', targetType: 'account', targetId: created!.id, result: 'ok' })
-        await bus.publish({ type: 'accounts.changed', ids: [created!.id] })
-        await update(qrId, 'done', { accountId: created!.id })
-        // one auth key — one client: the login client goes before the worker starts the account with the same key
-        await qrClient.destroy().catch(() => {})
-        client = undefined
-        await options.onAccountCreated?.(created!.id)
+        await update(qrId, 'done', { accountId: result.accountId })
+        await options.onAccountCreated?.(result.accountId)
       } catch (err) {
         const reason = abort.signal.aborted ? String((abort.signal.reason as Error)?.message) : null
         if (reason === 'cancelled') await update(qrId, 'cancelled')
