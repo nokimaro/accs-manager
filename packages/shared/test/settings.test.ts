@@ -85,7 +85,8 @@ describe('settings v1 definitions', () => {
 
   it('infers value types from definitions', () => {
     expectTypeOf<SettingsValues['worker.connectConcurrency']>().toEqualTypeOf<number>()
-    expectTypeOf<SettingsValues['telegram.desktop.apiId']>().toEqualTypeOf<number | null>()
+    expectTypeOf<SettingsValues['telegram.desktop.apiId']>().toEqualTypeOf<number>()
+    expectTypeOf<SettingsValues['telegram.own.apiId']>().toEqualTypeOf<number | null>()
     expectTypeOf<SettingsValues['notify.botToken']>().toEqualTypeOf<string | null>()
     expectTypeOf<SettingsValues['notify.enabled']>().toEqualTypeOf<boolean>()
     expectTypeOf<SettingsValues['notify.events']>().toEqualTypeOf<

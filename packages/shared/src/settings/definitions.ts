@@ -11,36 +11,49 @@ export const notifyEventOptions = [
   { value: 'proxy_expiring', label: 'Истекает срок прокси' },
 ] as const
 
+/** What Telegram Desktop 7.2.9 portable (Windows x64) reports — see the comment at the telegram.desktop.* settings. */
+export const TDESKTOP = {
+  apiId: 2040,
+  apiHash: 'b18441a1ff607e10a989891a5462e627',
+  deviceModel: 'Desktop',
+  systemVersion: 'Windows 11 x64',
+  appVersion: '7.2.9 x64',
+} as const
+
 const SECRET_NOTE = 'Хранится зашифрованным и после сохранения не показывается: его можно только заменить или очистить.'
 const DEVICE_NOTE =
   'Значение записывается в аккаунт при добавлении, поэтому смена настройки касается только аккаунтов, добавленных после неё.'
 
 export const settingsDef = {
   // telegram
+  // Defaults reproduce what the official Telegram Desktop 7.2.9 (portable, Windows x64) sends in initConnection:
+  // app_version = AppVersionStr + " x64" (tdesktop mtproto/session_private.cpp), system_version = "Windows 11 x64"
+  // and device_model = BIOS product name or "Desktop" when there is none (desktop-app/lib_base base_info_win.cpp).
+  // api_id/api_hash are the public values of the official app. Bump appVersion when Telegram Desktop updates.
   'telegram.desktop.apiId': int({
-    group: 'telegram', label: 'Desktop: api_id', default: null, min: 1, required: true, effect: 'new_connections',
+    group: 'telegram', label: 'Desktop: api_id', default: TDESKTOP.apiId, min: 1, required: true, effect: 'new_connections',
     description: 'api_id Telegram Desktop — для аккаунтов, импортированных из tdata.',
-    help: 'Идентификатор приложения, от имени которого подключаются аккаунты из tdata. Сессии в tdata созданы официальным Telegram Desktop, поэтому здесь нужен его api_id: иначе для Telegram сессия резко «превратится» в другое приложение.\n\nПока значение не задано, аккаунты из tdata не подключаются.',
+    help: `Идентификатор приложения, от имени которого подключаются аккаунты из tdata. Сессии в tdata созданы официальным Telegram Desktop, поэтому здесь его api_id (по умолчанию ${TDESKTOP.apiId}): иначе для Telegram сессия резко «превратится» в другое приложение.\n\nМенять не нужно.`,
   }),
-  'telegram.desktop.apiHash': secret({
-    group: 'telegram', label: 'Desktop: api_hash', required: true, effect: 'new_connections',
-    description: 'Секретный ключ в пару к Desktop: api_id.',
-    help: `Ключ приложения Telegram Desktop, парный к его api_id. Используется при каждом подключении аккаунтов из tdata.\n\n${SECRET_NOTE}`,
+  'telegram.desktop.apiHash': string({
+    group: 'telegram', label: 'Desktop: api_hash', default: TDESKTOP.apiHash, pattern: /^[0-9a-f]{32}$/, patternMessage: '32 шестнадцатеричных символа', required: true, effect: 'new_connections',
+    description: 'api_hash Telegram Desktop — в пару к Desktop: api_id.',
+    help: 'Ключ официального приложения Telegram Desktop, парный к его api_id. Значение публичное и одинаковое у всех копий Telegram Desktop, поэтому хранится открыто, а не как секрет.\n\nМенять не нужно.',
   }),
   'telegram.desktop.deviceModel': string({
-    group: 'telegram', label: 'Desktop: модель устройства', default: null, required: true, effect: 'new_connections',
+    group: 'telegram', label: 'Desktop: модель устройства', default: TDESKTOP.deviceModel, required: true, effect: 'new_connections',
     description: 'Как устройство аккаунта из tdata видно в «Активных сеансах».',
-    help: `Модель устройства, которую клиент сообщает Telegram, например «Desktop» или «MacBookPro18,3». Именно её вы увидите в Telegram в списке активных сеансов.\n\n${DEVICE_NOTE}`,
+    help: `Модель устройства, которую клиент сообщает Telegram. Telegram Desktop на Windows берёт её из BIOS (модель ПК или материнской платы), а если там пусто — пишет «Desktop»; это значение и стоит по умолчанию.\n\nЧтобы сессии выглядели как ваш компьютер, посмотрите в Telegram: Настройки → Устройства → текущий сеанс Telegram Desktop, и впишите ту же модель.\n\n${DEVICE_NOTE}`,
   }),
   'telegram.desktop.systemVersion': string({
-    group: 'telegram', label: 'Desktop: версия ОС', default: null, required: true, effect: 'new_connections',
-    description: 'Операционная система, которую видит Telegram, например «Windows 10».',
-    help: `Версия ОС, которую клиент сообщает Telegram при подключении аккаунта из tdata. Видна в списке активных сеансов.\n\n${DEVICE_NOTE}`,
+    group: 'telegram', label: 'Desktop: версия ОС', default: TDESKTOP.systemVersion, required: true, effect: 'new_connections',
+    description: 'Операционная система, которую видит Telegram, например «Windows 11 x64».',
+    help: `Версия ОС, которую клиент сообщает Telegram: Telegram Desktop пишет «Windows 11» или «Windows 10» и разрядность системы — «Windows 11 x64». Видна в списке активных сеансов.\n\n${DEVICE_NOTE}`,
   }),
   'telegram.desktop.appVersion': string({
-    group: 'telegram', label: 'Desktop: версия приложения', default: null, required: true, effect: 'new_connections',
-    description: 'Версия Telegram Desktop, например «5.8.3 x64».',
-    help: `Версия приложения, которую клиент сообщает Telegram. Лучше держать её близкой к актуальной версии Telegram Desktop.\n\n${DEVICE_NOTE}`,
+    group: 'telegram', label: 'Desktop: версия приложения', default: TDESKTOP.appVersion, required: true, effect: 'new_connections',
+    description: 'Версия Telegram Desktop, например «7.2.9 x64».',
+    help: `Версия приложения, которую клиент сообщает Telegram: номер версии и « x64» у 64-битной сборки для Windows (в том числе portable). По умолчанию — последняя стабильная на момент обновления панели; при выходе новых версий Telegram Desktop её стоит поднимать.\n\n${DEVICE_NOTE}`,
   }),
   'telegram.desktop.langCode': string({
     group: 'telegram', label: 'Desktop: код языка', default: 'ru', pattern: /^[a-z]{2}$/, patternMessage: 'Две латинские буквы, например ru', effect: 'new_connections',

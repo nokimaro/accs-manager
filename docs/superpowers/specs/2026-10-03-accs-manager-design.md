@@ -377,7 +377,7 @@ settings.get('worker.connectConcurrency') // number
 
 | Группа | Ключи (умолчание) |
 |---|---|
-| `telegram` | `telegram.desktop.apiId`, `telegram.desktop.apiHash` (secret), `telegram.desktop.deviceModel`, `telegram.desktop.systemVersion`, `telegram.desktop.appVersion`, `telegram.desktop.langCode`, `telegram.own.apiId`, `telegram.own.apiHash` (secret), `telegram.qrTimeout` (`5m`) — effect `new_connections` |
+| `telegram` | `telegram.desktop.apiId`, `telegram.desktop.apiHash`, `telegram.desktop.deviceModel`, `telegram.desktop.systemVersion`, `telegram.desktop.appVersion` (умолчания — значения официального Telegram Desktop 7.2.9 portable x64: `2040`, публичный api_hash, `Desktop`, `Windows 11 x64`, `7.2.9 x64`; api_hash Desktop публичный, поэтому не secret), `telegram.desktop.langCode`, `telegram.own.apiId`, `telegram.own.apiHash` (secret), `telegram.qrTimeout` (`5m`) — effect `new_connections` |
 | `notifications` | `notify.enabled` (`false`), `notify.botToken` (secret), `notify.chatId`, `notify.events` (`code`, `proxy_down`, `unauthorized`, `banned`, `frozen`, `proxy_expiring`), `notify.maxAge` (`10m`) |
 | `proxy` | `proxy.checkInterval` (`5m`), `proxy.failThreshold` (`3`), `proxy.expiryWarnDays` (`3`) |
 | `proxyStore` | `proxyStore.enabled` (`false`), `proxyStore.apiKey` (secret), `proxyStore.country` (`kz`), `proxyStore.category` (`for_all`), `proxyStore.syncInterval` (`15m`) |
