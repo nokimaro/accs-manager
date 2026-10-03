@@ -18,6 +18,7 @@ describe('loadEnv', () => {
     const env = loadEnv({ ...valid, TRUST_PROXY: 'true', PORT: '8080' })
     expect(env.TRUST_PROXY).toBe(true)
     expect(env.PORT).toBe(8080)
+    expect(loadEnv({ ...valid, TRUST_PROXY: 'false' }).TRUST_PROXY).toBe(false)
   })
 
   it('rejects a key that is not 32 bytes', () => {

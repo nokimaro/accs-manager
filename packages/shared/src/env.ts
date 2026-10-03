@@ -12,7 +12,7 @@ export const envSchema = z.object({
   REDIS_URL: z.url({ protocol: /^rediss?$/ }),
   APP_ENCRYPTION_KEY: base64Key32,
   PUBLIC_ORIGIN: z.url({ protocol: /^https?$/ }),
-  TRUST_PROXY: z.coerce.boolean().default(false),
+  TRUST_PROXY: z.stringbool().default(false),
   LOG_LEVEL: z.enum(['fatal', 'error', 'warn', 'info', 'debug', 'trace']).default('info'),
 })
 
@@ -21,8 +21,7 @@ export type Env = z.output<typeof envSchema>
 export function loadEnv(source: Record<string, string | undefined> = process.env): Env {
   const parsed = envSchema.safeParse(source)
   if (!parsed.success) {
-    const issues = parsed.error.issues.map(issue => `${issue.path.join('.')}: ${issue.message}`).join('\n')
-    throw new Error(`Invalid environment:\n${issues}`)
+    throw new Error(`Invalid environment:\n${z.prettifyError(parsed.error)}`)
   }
   return parsed.data
 }
