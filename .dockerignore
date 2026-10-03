@@ -3,6 +3,7 @@
 **/.turbo
 .git
 **/.env
+.secrets
 **/.env.*
 !**/.env.example
 **/*.zip

@@ -2,6 +2,8 @@
 .env
 .env.*
 !.env.example
+# local copies of production secrets (e.g. APP_ENCRYPTION_KEY backup) — never commit
+.secrets/
 
 # telegram session material — never commit
 tdata-samples/
