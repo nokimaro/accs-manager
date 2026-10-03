@@ -1,0 +1,19 @@
+# Named tunnel `accs-manager` (id 2c394400-9bae-48b4-85ab-1c222eda90a3), installed as
+# /etc/cloudflared/accs-manager.yml. DNS: panel.159.team -> this tunnel (CNAME added 2026-10-03).
+# The apex 159.team is intentionally left without records.
+#
+# The whole panel (SPA + /api) is served on one hostname so the session cookie stays same-origin.
+# Anything else that reaches the tunnel gets 404.
+tunnel: 2c394400-9bae-48b4-85ab-1c222eda90a3
+credentials-file: /etc/cloudflared/accs-manager.json
+
+# metrics on loopback only: 20241 = p2c staging tunnel, 20242 = p2c-pgon, 20243 = this one
+metrics: 127.0.0.1:20243
+loglevel: info
+
+ingress:
+  - hostname: panel.159.team
+    service: http://127.0.0.1:3300
+    originRequest:
+      connectTimeout: 10s
+  - service: http_status:404
