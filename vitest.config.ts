@@ -11,6 +11,8 @@ export default defineConfig({
       { test: { name: 'db', root: './packages/db', environment: 'node', ...integration } },
       { test: { name: 'server', root: './packages/server', environment: 'node', ...integration } },
       { test: { name: 'api', root: './apps/api', environment: 'node', ...integration } },
+      // folder project: uses apps/web/vite.config.ts (jsdom, setup file)
+      'apps/web',
     ],
   },
 })
