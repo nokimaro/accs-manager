@@ -12,11 +12,14 @@ Telegram-канал через бота, пул прокси (прокси на 
 - **Репозиторий публичный.** Никаких секретов в git, логах, фикстурах и документации: токены, пароли, ключи,
   содержимое `.env`, API-ключ proxy-store (живёт только в зашифрованной настройке `proxyStore.apiKey`),
   IP прод-сервера (берите из `gh variable get DEPLOY_HOST --env production`).
+- **`.secrets/`** (в `.gitignore` и `.dockerignore`) — локальные копии прод-секретов; там
+  `prod-app-encryption-key` (резервная копия `APP_ENCRYPTION_KEY` прода). Не печатать, не коммитить.
 - **`tdata-samples/`** содержит живой auth key владельца: не открывать в логах, не печатать байты ключей,
   не коммитить (в `.gitignore`).
 - **Пуш в `main` = деплой в прод.** Перед пушем: `pnpm lint`, `pnpm typecheck`, `pnpm test`, для изменений UI —
   e2e (`E2E_BASE_URL=http://localhost:5173 pnpm e2e` против dev). Проверить дифф на секреты. После пуша — следить
-  за прогоном (`gh run watch`). Крупную работу — через ветку.
+  за прогоном (`gh run watch`). Крупную работу — через ветку. Коммиты, меняющие только `docs/**` и `*.md`,
+  CI не запускают и не передеплоивают (`paths-ignore`).
 - Сервер общий с проектами p2c (sbpredator): их контейнеры `p2c-*`, туннели `cloudflared`, `cloudflared-p2c-pgon`,
   `~/.cloudflared/cert.pem` (sbpredator) **не трогать**.
 - Секреты никогда не возвращаются API и в аудите заменяются на `[redacted]`.
@@ -88,7 +91,13 @@ CLI (`apps/api/src/cli.ts`): `admin:create|admin:reset-password|admin:disable --
   `description` (строка под названием) и `help` (ⓘ-popover, абзацы через пустую строку), `unit` для чисел
   (`units.*` — склоняемые формы), `effect` (`immediate`/`new_connections`/`restart`). UI раздела «Настройки»
   строится из определений автоматически; сервер и SPA валидируют одними zod-схемами. Тест
-  `packages/shared/test/settings-format.test.ts` требует description/help/unit.
+  `packages/shared/test/settings-format.test.ts` требует description/help/unit. Разумные значения задаются как
+  `default` в коде (не данными в БД): переопределение админом — строка в `settings`, сброс возвращает к умолчанию.
+- `telegram.desktop.*` по умолчанию = то, что шлёт официальный Telegram Desktop portable x64 (`TDESKTOP` в
+  `definitions.ts`: api_id 2040 + публичный api_hash, `Desktop`, `Windows 11 x64`, `7.2.9 x64`; источники —
+  tdesktop `mtproto/session_private.cpp` `ComputeAppVersion`, desktop-app/lib_base `base_info_win.cpp`).
+  При выходе новой стабильной версии Telegram Desktop поднимать `TDESKTOP.appVersion`. Параметры устройства
+  записываются в аккаунт при добавлении — смена касается только новых аккаунтов.
 - Секреты в БД: AES-256-GCM `v1:<iv>:<ct>:<tag>` ключом `APP_ENCRYPTION_KEY`. Живое применение настроек —
   Redis pub/sub `settings.changed` → `SettingsService` перечитывает кеш.
 - API: валидация `zValidator(..., validationHook)`, мутирующие запросы проходят Origin guard и глобальный
