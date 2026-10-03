@@ -3,6 +3,7 @@ import { useQuery } from '@tanstack/react-query'
 import { createFileRoute, stripSearchParams } from '@tanstack/react-router'
 import { createColumnHelper } from '@tanstack/react-table'
 import type { AuditEntryDto } from '@workspace/shared/api'
+import { Alert, AlertAction, AlertTitle } from '@workspace/ui/components/alert'
 import { Badge } from '@workspace/ui/components/badge'
 import { Button } from '@workspace/ui/components/button'
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '@workspace/ui/components/dialog'
@@ -47,7 +48,7 @@ function AuditPage() {
   const [details, setDetails] = React.useState<AuditEntryDto | null>(null)
   const [actionDraft, setActionDraft] = React.useState(search.action ?? '')
   const admins = useQuery(adminsQueryOptions)
-  const { data, isPending } = useQuery(auditQueryOptions({ ...search, pageSize: PAGE_SIZE }))
+  const { data, isPending, isError, refetch } = useQuery(auditQueryOptions({ ...search, pageSize: PAGE_SIZE }))
 
   const columns = React.useMemo(
     () =>
@@ -64,7 +65,7 @@ function AuditPage() {
           header: 'Результат',
           cell: (i) => (
             <Badge variant={i.getValue() === 'ok' ? 'secondary' : 'destructive'}>
-              {i.getValue() === 'ok' ? 'ок' : 'ошибка'} {i.row.original.statusCode ?? ''}
+              {i.getValue() === 'ok' ? 'ок' : 'ошибка'}{i.row.original.statusCode ? ` ${i.row.original.statusCode}` : ''}
             </Badge>
           ),
         }),
@@ -84,6 +85,11 @@ function AuditPage() {
 
   const adminItems = [{ label: 'Все', value: null as string | null }, ...(admins.data?.items ?? []).map((a) => ({ label: a.login, value: a.id }))]
   const setSearch = (patch: Partial<typeof search>) => void navigate({ search: (prev) => ({ ...prev, page: 1, ...patch }) })
+
+  const commitAction = () => {
+    const next = actionDraft.trim() || undefined
+    if (next !== search.action) setSearch({ action: next })
+  }
 
   return (
     <div className="flex flex-col gap-6">
@@ -119,17 +125,26 @@ function AuditPage() {
           className="contents"
           onSubmit={(e) => {
             e.preventDefault()
-            setSearch({ action: actionDraft.trim() || undefined })
+            commitAction()
           }}
         >
           <Field className="w-64">
             <FieldLabel htmlFor="audit-action">Действие</FieldLabel>
             <Input id="audit-action" placeholder="например settings.update" value={actionDraft} onChange={(e) => setActionDraft(e.target.value)}
-              onBlur={() => setSearch({ action: actionDraft.trim() || undefined })} />
+              onBlur={commitAction} />
           </Field>
         </form>
       </div>
-      {isPending ? (
+      {isError ? (
+        <Alert variant="destructive">
+          <AlertTitle>Не удалось загрузить аудит</AlertTitle>
+          <AlertAction>
+            <Button size="sm" variant="outline" onClick={() => void refetch()}>
+              Повторить
+            </Button>
+          </AlertAction>
+        </Alert>
+      ) : isPending ? (
         <Skeleton className="h-64 w-full" />
       ) : (
         <ServerDataTable

@@ -111,7 +111,7 @@ function AdminsPage() {
           </AlertDialogHeader>
           <AlertDialogFooter>
             <AlertDialogCancel>Отмена</AlertDialogCancel>
-            <AlertDialogAction variant="destructive" onClick={() => disableTarget && disable.mutate(disableTarget.id)}>
+            <AlertDialogAction variant="destructive" disabled={disable.isPending} onClick={() => disableTarget && disable.mutate(disableTarget.id)}>
               Отключить
             </AlertDialogAction>
           </AlertDialogFooter>

@@ -18,10 +18,23 @@ export function ResetPasswordDialog({ admin, onOpenChange }: { admin: AdminDto |
       onOpenChange(false)
       setPassword('')
     },
+    onError: (err) => {
+      if (!(err instanceof ApiError)) {
+        toast.add({ title: 'Не удалось сбросить пароль', description: err instanceof Error ? err.message : String(err) })
+      }
+    },
   })
   const error = mutation.error instanceof ApiError ? (mutation.error.fields.password ?? mutation.error.message) : undefined
+  const handleOpenChange = (next: boolean) => {
+    // never keep a typed password or a stale error after the dialog closes
+    if (!next) {
+      setPassword('')
+      mutation.reset()
+    }
+    onOpenChange(next)
+  }
   return (
-    <Dialog open={admin !== null} onOpenChange={onOpenChange}>
+    <Dialog open={admin !== null} onOpenChange={handleOpenChange}>
       <DialogContent>
         <form
           className="flex flex-col gap-6"

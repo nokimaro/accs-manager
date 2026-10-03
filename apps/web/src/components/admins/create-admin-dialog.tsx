@@ -26,13 +26,28 @@ export function CreateAdminDialog() {
       setPassword('')
       mutation.reset()
     },
+    onError: (err) => {
+      if (!(err instanceof ApiError) || (err.status !== 400 && err.status !== 409)) {
+        toast.add({ title: 'Не удалось создать админа', description: err instanceof Error ? err.message : String(err) })
+      }
+    },
   })
   const err = mutation.error instanceof ApiError ? mutation.error : null
   const fields = err?.fields ?? {}
   const loginError = fields.login ?? (err?.status === 409 ? err.message : undefined)
 
+  const handleOpenChange = (next: boolean) => {
+    // never keep a typed password or a stale error after the dialog closes
+    if (!next) {
+      setLogin('')
+      setPassword('')
+      mutation.reset()
+    }
+    setOpen(next)
+  }
+
   return (
-    <Dialog open={open} onOpenChange={setOpen}>
+    <Dialog open={open} onOpenChange={handleOpenChange}>
       <DialogTrigger render={<Button />}>
         <PlusIcon data-icon="inline-start" />
         Добавить админа
