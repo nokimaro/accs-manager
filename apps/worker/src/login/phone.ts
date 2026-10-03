@@ -4,7 +4,7 @@ import { loginControlChannel, loginControlSchema, type LoginControl } from '@wor
 import { parseDuration } from '@workspace/shared/duration'
 import type { WorkerDeps } from '../deps.ts'
 import type { SessionProfile } from '../telegram/session.ts'
-import { createLoginKit } from './common.ts'
+import { createLoginKit, LoginFailure } from './common.ts'
 import type { PhoneClient, PhoneClientFactory, SentCodeInfo } from './phone-client.ts'
 
 export interface PhoneStart {
@@ -32,12 +32,9 @@ interface PhoneUpdate {
   message?: string
 }
 
-/** A refusal shown to the admin as is (the login ends). */
-class LoginRefused extends Error {}
-
 /** What Telegram (or mtcute) refused, in words for the admin. */
 export function phoneLoginError(err: unknown): string {
-  if (err instanceof LoginRefused) return err.message
+  if (err instanceof LoginFailure) return err.message
   if (tl.RpcError.is(err)) {
     switch (err.text) {
       case 'PHONE_NUMBER_INVALID':
@@ -142,7 +139,7 @@ export function createPhoneLogin(deps: WorkerDeps, factory: PhoneClientFactory, 
           const sentCode = await phoneClient.sendCode(phone, signal)
           if (isProfile(sentCode)) return sentCode
           if (sentCode.deliveryType === 'email_required') {
-            throw new LoginRefused('Telegram требует привязать почту для входа — сделайте это в официальном приложении')
+            throw new LoginFailure('Telegram требует привязать почту для входа — сделайте это в официальном приложении')
           }
           await codeSent(sentCode)
           return undefined
@@ -229,7 +226,7 @@ export function createPhoneLogin(deps: WorkerDeps, factory: PhoneClientFactory, 
           await update(loginId, 'cancelled')
         } else if (reason === 'expired') await update(loginId, 'expired')
         else {
-          if (!(err instanceof LoginRefused)) logger.warn({ err, loginId }, 'phone: login failed')
+          if (!(err instanceof LoginFailure)) logger.warn({ err, loginId }, 'phone: login failed')
           await update(loginId, 'failed', { message: phoneLoginError(err) })
         }
       } finally {

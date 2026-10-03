@@ -1,5 +1,5 @@
 import { randomUUID } from 'node:crypto'
-import { accounts, eq } from '@workspace/db'
+import { accounts, eq, proxies } from '@workspace/db'
 import type { AppEvent } from '@workspace/shared/events'
 import { loginControlChannel } from '@workspace/shared/commands'
 import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest'
@@ -311,6 +311,26 @@ describe('phone login', () => {
     off()
     expect(made[0]!.loggedOut).toBe(true)
     expect(await w.t.db.select().from(accounts).where(eq(accounts.tgUserId, 61010))).toHaveLength(0)
+  })
+
+  it('logs the new session out when saving the account fails, and says why in words', async () => {
+    const [proxy] = await w.t.db.insert(proxies).values({ source: 'manual', type: 'socks5', host: '10.6.6.1', port: 1080, status: 'ok' }).returning()
+    const loginId = randomUUID()
+    const { factory, made } = scripted(61013)
+    const { states, off, names } = await collect(loginId)
+    const run = createPhoneLogin(w.deps, factory).run({ ...start(loginId), proxyId: proxy!.id })
+    await vi.waitFor(() => expect(names()).toContain('code_sent'))
+    // meanwhile another account took the proxy (a second admin, another tab)
+    const device = { deviceModel: 'Desktop', systemVersion: 'Windows 11 x64', appVersion: '7.2.9 x64', langCode: 'ru' }
+    await w.t.db.insert(accounts).values({ tgUserId: 61014, source: 'tdata', clientProfile: 'desktop', device, connectionMode: 'proxy', proxyId: proxy!.id })
+    await send(loginId, { type: 'code', code: '12345' })
+    await run
+    await vi.waitFor(() => expect(states.at(-1)).toMatchObject({ state: 'failed', message: 'Прокси уже занят другим аккаунтом — начните заново' }))
+    off()
+    expect(made[0]!.loggedOut).toBe(true)
+    expect(made[0]!.destroyed).toBe(true)
+    expect(await w.t.db.select().from(accounts).where(eq(accounts.tgUserId, 61013))).toHaveLength(0)
+    await w.t.db.delete(proxies).where(eq(proxies.id, proxy!.id))
   })
 })
 

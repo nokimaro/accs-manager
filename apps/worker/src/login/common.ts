@@ -25,9 +25,26 @@ export interface FinishLogin {
 
 export type FinishResult = { accountId: string } | { duplicateOf: string }
 
+/** A login that ends with a message for the admin as is (logged without details). */
+export class LoginFailure extends Error {}
+
+/** The Postgres error under a Drizzle one: its code and constraint, never the query parameters (they hold the phone). */
+function dbCause(err: unknown): { code?: string; constraint?: string } {
+  const cause = (err as { cause?: unknown })?.cause ?? err
+  return typeof cause === 'object' && cause !== null ? (cause as { code?: string; constraint?: string }) : {}
+}
+
+function saveFailure(err: unknown): string {
+  const { code, constraint } = dbCause(err)
+  if (code === '23505' && constraint === 'accounts_proxy_id_key') return 'Прокси уже занят другим аккаунтом — начните заново'
+  if (code === '23505' && constraint === 'accounts_tg_user_id_key') return 'Этот аккаунт уже есть в панели'
+  if (code === '23503') return 'Прокси удалён — начните заново'
+  return 'Не удалось сохранить аккаунт — начните заново'
+}
+
 /** The pieces QR and phone-number logins share: the proxy, the control channel, and saving the new account. */
 export function createLoginKit(deps: WorkerDeps) {
-  const { db, settings, cipher, bus } = deps
+  const { db, settings, cipher, bus, logger } = deps
 
   return {
     /** A free, usable proxy (the same rule as the api's isProxyFree), or null for an explicit «direct». */
@@ -82,27 +99,37 @@ export function createLoginKit(deps: WorkerDeps) {
         await client.destroy().catch(() => {})
         return { duplicateOf: existing.id }
       }
-      const session = await client.exportSession()
-      const [created] = await db
-        .insert(accounts)
-        .values({
-          tgUserId: profile.tgUserId,
-          phone: profile.phone,
-          username: profile.username,
-          firstName: profile.firstName,
-          lastName: profile.lastName,
-          isPremium: profile.isPremium,
-          dcId: profile.dcId,
-          source: params.source,
-          clientProfile: 'own',
-          device: params.device,
-          connectionMode: params.proxyId ? 'proxy' : 'direct',
-          proxyId: params.proxyId,
-          status: 'pending_check',
-          sessionImportEnc: cipher.encrypt(session),
-          cloudPasswordEnc: params.cloudPassword ? cipher.encrypt(params.cloudPassword) : null,
-        })
-        .returning({ id: accounts.id })
+      let created: { id: string } | undefined
+      try {
+        const session = await client.exportSession()
+        ;[created] = await db
+          .insert(accounts)
+          .values({
+            tgUserId: profile.tgUserId,
+            phone: profile.phone,
+            username: profile.username,
+            firstName: profile.firstName,
+            lastName: profile.lastName,
+            isPremium: profile.isPremium,
+            dcId: profile.dcId,
+            source: params.source,
+            clientProfile: 'own',
+            device: params.device,
+            connectionMode: params.proxyId ? 'proxy' : 'direct',
+            proxyId: params.proxyId,
+            status: 'pending_check',
+            sessionImportEnc: cipher.encrypt(session),
+            cloudPasswordEnc: params.cloudPassword ? cipher.encrypt(params.cloudPassword) : null,
+          })
+          .returning({ id: accounts.id })
+      } catch (err) {
+        // the session is authorized but the panel cannot keep it: end it, or the owner keeps a device nobody controls
+        const { code, constraint } = dbCause(err)
+        logger.warn({ code, constraint, error: err instanceof Error ? err.name : typeof err }, 'login: saving the account failed')
+        await client.logOut().catch(() => {})
+        await client.destroy().catch(() => {})
+        throw new LoginFailure(saveFailure(err))
+      }
       await writeAudit(db, {
         actor: params.adminId ? { type: 'admin', adminId: params.adminId } : { type: 'system' },
         action: `account.${params.source}.created`,

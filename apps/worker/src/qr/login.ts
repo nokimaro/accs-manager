@@ -2,7 +2,7 @@ import type { QrState } from '@workspace/shared/accounts'
 import { qrControlChannel, qrControlSchema } from '@workspace/shared/commands'
 import { parseDuration } from '@workspace/shared/duration'
 import type { WorkerDeps } from '../deps.ts'
-import { createLoginKit } from '../login/common.ts'
+import { createLoginKit, LoginFailure } from '../login/common.ts'
 import type { QrClientFactory } from './client.ts'
 
 export interface QrStart {
@@ -94,7 +94,7 @@ export function createQrLogin(deps: WorkerDeps, factory: QrClientFactory, option
         if (reason === 'cancelled') await update(qrId, 'cancelled')
         else if (reason === 'expired') await update(qrId, 'expired')
         else {
-          logger.warn({ err, qrId }, 'qr: login failed')
+          if (!(err instanceof LoginFailure)) logger.warn({ err, qrId }, 'qr: login failed')
           await update(qrId, 'failed', { message: err instanceof Error ? err.message.slice(0, 300) : String(err) })
         }
       } finally {
