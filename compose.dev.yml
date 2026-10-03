@@ -1,0 +1,10 @@
+# Local development: only Postgres and Redis, published on localhost.
+#   docker compose -f compose.yml -f compose.dev.yml up -d accs-postgres accs-redis
+# Ports are configurable in case 5432/6379 are taken by other projects.
+services:
+  accs-postgres:
+    ports:
+      - "127.0.0.1:${DEV_PG_PORT:-5432}:5432"
+  accs-redis:
+    ports:
+      - "127.0.0.1:${DEV_REDIS_PORT:-6379}:6379"

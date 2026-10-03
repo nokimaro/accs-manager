@@ -1,0 +1,86 @@
+name: accs-manager
+
+# All services, containers, volumes and the network carry the "accs-" prefix
+# so they are easy to tell apart in `docker ps` / `docker volume ls`.
+
+x-api-image: &api-image
+  image: accs-manager-api:local
+  build:
+    context: .
+    target: api
+
+x-db-url: &db-url postgres://accs:${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD in .env}@accs-postgres:5432/accs
+
+services:
+  accs-postgres:
+    image: postgres:18-trixie
+    container_name: accs-postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: accs
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD in .env}
+      POSTGRES_DB: accs
+    volumes:
+      # Postgres 18 images keep PGDATA in a versioned subdirectory of /var/lib/postgresql
+      - accs-pgdata:/var/lib/postgresql
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U accs -d accs"]
+      interval: 5s
+      timeout: 3s
+      retries: 30
+
+  accs-redis:
+    image: redis:8-trixie
+    container_name: accs-redis
+    restart: unless-stopped
+    # BullMQ (plan 2) requires noeviction
+    command: ["redis-server", "--appendonly", "yes", "--maxmemory-policy", "noeviction"]
+    volumes:
+      - accs-redisdata:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 30
+
+  accs-migrate:
+    <<: *api-image
+    container_name: accs-migrate
+    command: ["node", "packages/db/src/migrate-cli.ts"]
+    environment:
+      DATABASE_URL: *db-url
+    depends_on:
+      accs-postgres:
+        condition: service_healthy
+    restart: "no"
+
+  accs-api:
+    <<: *api-image
+    container_name: accs-api
+    restart: unless-stopped
+    environment:
+      NODE_ENV: production
+      PORT: 3000
+      DATABASE_URL: *db-url
+      REDIS_URL: redis://accs-redis:6379
+      APP_ENCRYPTION_KEY: ${APP_ENCRYPTION_KEY:?set APP_ENCRYPTION_KEY in .env}
+      PUBLIC_ORIGIN: ${PUBLIC_ORIGIN:?set PUBLIC_ORIGIN in .env}
+      TRUST_PROXY: ${TRUST_PROXY:-false}
+      LOG_LEVEL: ${LOG_LEVEL:-info}
+    ports:
+      - "${API_BIND:-127.0.0.1}:${API_PORT:-3000}:3000"
+    depends_on:
+      accs-migrate:
+        condition: service_completed_successfully
+      accs-redis:
+        condition: service_healthy
+
+volumes:
+  accs-pgdata:
+    name: accs-pgdata
+  accs-redisdata:
+    name: accs-redisdata
+
+networks:
+  default:
+    name: accs-net
