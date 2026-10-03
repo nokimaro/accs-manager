@@ -107,6 +107,16 @@ describe('syncProxyStore', () => {
     expect(onDown).toHaveBeenCalledExactlyOnceWith(goneRow.id)
   })
 
+  it('does not expire the whole pool on one empty answer from the provider', async () => {
+    await syncProxyStore(w.deps, fakeFetch({ '5133780': item('5133780'), '5133781': item('5133781') }), {}, statusKey)
+    const onDown = vi.fn()
+    const result = await syncProxyStore(w.deps, fakeFetch({}), { onDown }, statusKey)
+    expect(result).toMatchObject({ ok: true, expired: 0 })
+    expect(onDown).not.toHaveBeenCalled()
+    const statuses = (await w.t.db.select().from(proxies)).filter((r) => r.externalId?.startsWith('51337')).map((r) => r.status)
+    expect(statuses).not.toContain('expired')
+  })
+
   it('records a failed sync without leaking the API key', async () => {
     const failing: ProxyStoreFetch = async () => {
       throw new Error('getaddrinfo ENOTFOUND for https://proxy-store.com/api/k3y-0123456789abcdef/getproxy/')

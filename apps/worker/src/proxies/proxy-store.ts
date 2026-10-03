@@ -175,8 +175,11 @@ export async function syncProxyStore(
       }
     }
 
-    // gone from the provider (cancelled, not renewed): expired; accounts on it stop
-    for (const row of byExternalId.values()) {
+    // gone from the provider (cancelled, not renewed): expired; accounts on it stop. An answer with nothing for us at
+    // all is more likely a provider glitch than every proxy cancelled at once — real ends come through expires_at.
+    const vanished = wanted.length === 0 && byExternalId.size > 0 ? [] : [...byExternalId.values()]
+    if (vanished.length === 0 && byExternalId.size > 0) logger.warn({ known: byExternalId.size }, 'proxy-store: empty answer, nothing expired')
+    for (const row of vanished) {
       if (row.status === 'expired') continue
       await db.update(proxies).set({ status: 'expired' }).where(eq(proxies.id, row.id))
       result.expired++
