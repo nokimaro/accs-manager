@@ -10,6 +10,7 @@ import { syncProxyStore } from './proxies/proxy-store.ts'
 import { createAccountManager, type SessionFactory } from './accounts/manager.ts'
 import { createCodeCollector } from './codes/collector.ts'
 import { housekeeping } from './housekeeping.ts'
+import { createNotifier } from './notify/notifier.ts'
 import { createMtcuteSession } from './telegram/mtcute-session.ts'
 import { createAccountStorage, prepareMtcuteStorage } from './telegram/storage.ts'
 import { createWorkerRuntime } from './runtime.ts'
@@ -55,8 +56,9 @@ const sessionFactory: SessionFactory = (account, ctx) => {
     importSession: ctx.importSession,
   })
 }
-const codeCollector = createCodeCollector(deps)
-const accountManager = createAccountManager(deps, sessionFactory, { onSessionStarted: codeCollector.attach })
+const notifier = createNotifier(deps, fetch)
+const codeCollector = createCodeCollector(deps, { onCode: notifier.onCode })
+const accountManager = createAccountManager(deps, sessionFactory, { onSessionStarted: codeCollector.attach, onStatusChanged: notifier.onStatusChanged })
 
 const proxyChecker = createMtcuteProxyChecker(() => ({ apiId: settings.get('telegram.desktop.apiId'), apiHash: settings.get('telegram.desktop.apiHash') }))
 const proxyHealth = createProxyHealth(deps, proxyChecker, { onDown: accountManager.onProxyDown, onUp: accountManager.onProxyUp })
@@ -80,11 +82,14 @@ const runtime = createWorkerRuntime(deps, {
     },
     'accounts.refreshProfiles': async () => accountManager.refreshProfiles(),
     housekeeping: async () => {
-      logger.info(await housekeeping(deps), 'worker: housekeeping done')
+      const removed = await housekeeping(deps)
+      const expiringProxies = await notifier.warnExpiringProxies()
+      logger.info({ ...removed, expiringProxies }, 'worker: housekeeping done')
     },
   },
 })
 await runtime.start()
+notifier.start()
 const stopHeartbeat = startWorkerHeartbeat(redis, env.APP_VERSION)
 logger.info('worker: started')
 // connects in the background: commands and maintenance keep flowing meanwhile
@@ -100,6 +105,7 @@ async function shutdown(signal: string): Promise<void> {
   try {
     await runtime.stop()
     await accountManager.stopAll()
+    await notifier.stop()
     await stopHeartbeat()
     settings.close()
     await bus.close()
