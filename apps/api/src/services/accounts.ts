@@ -70,19 +70,24 @@ export async function updateAccount(db: Db, id: string, input: UpdateAccountInpu
   return getAccount(db, id)
 }
 
+/** Enabled, working (or not yet checked) and not used by another account. */
+export async function isProxyFree(db: Db, proxyId: string, exceptAccountId?: string): Promise<boolean> {
+  const [proxy] = await db
+    .select({ id: proxies.id })
+    .from(proxies)
+    .leftJoin(accounts, exceptAccountId ? and(eq(accounts.proxyId, proxies.id), ne(accounts.id, exceptAccountId)) : eq(accounts.proxyId, proxies.id))
+    .where(and(eq(proxies.id, proxyId), isNull(proxies.disabledAt), inArray(proxies.status, ['ok', 'unchecked', 'failing']), isNull(accounts.id)))
+  return Boolean(proxy)
+}
+
 /**
  * Binds a free proxy (or none: `direct`, only by an explicit decision). A free proxy is enabled, not
  * dead/expired/provisioning and not used by another account.
  */
 export async function setAccountProxy(db: Db, id: string, proxyId: string | null): Promise<AccountDto> {
   const account = await getAccount(db, id)
-  if (proxyId) {
-    const [proxy] = await db
-      .select({ id: proxies.id })
-      .from(proxies)
-      .leftJoin(accounts, and(eq(accounts.proxyId, proxies.id), ne(accounts.id, id)))
-      .where(and(eq(proxies.id, proxyId), isNull(proxies.disabledAt), inArray(proxies.status, ['ok', 'unchecked', 'failing']), isNull(accounts.id)))
-    if (!proxy) throw new DomainError(409, 'proxy_unavailable', 'Прокси не работает, отключён или уже занят другим аккаунтом')
+  if (proxyId && !(await isProxyFree(db, proxyId, id))) {
+    throw new DomainError(409, 'proxy_unavailable', 'Прокси не работает, отключён или уже занят другим аккаунтом')
   }
   await db
     .update(accounts)
