@@ -1,0 +1,197 @@
+import { tl } from '@mtcute/core'
+import type { PhoneLoginState } from '@workspace/shared/accounts'
+import { loginControlChannel, loginControlSchema, type LoginControl } from '@workspace/shared/commands'
+import { parseDuration } from '@workspace/shared/duration'
+import type { WorkerDeps } from '../deps.ts'
+import type { SessionProfile } from '../telegram/session.ts'
+import { createLoginKit } from './common.ts'
+import type { PhoneClient, PhoneClientFactory, SentCodeInfo } from './phone-client.ts'
+
+export interface PhoneStart {
+  loginId: string
+  /** digits only (the api normalizes it) */
+  phone: string
+  proxyId: string | null
+  adminId: string | null
+}
+
+export interface PhoneLoginOptions {
+  /** overrides telegram.qrTimeout (tests) */
+  timeoutMs?: number
+  /** the new account is in the database: start it */
+  onAccountCreated?: (accountId: string) => Promise<void> | void
+}
+
+interface PhoneUpdate {
+  deliveryType?: string
+  codeLength?: number
+  nextType?: string
+  retryAfterSec?: number
+  hint?: string
+  accountId?: string
+  message?: string
+}
+
+/** A refusal shown to the admin as is (the login ends). */
+class LoginRefused extends Error {}
+
+/** What Telegram (or mtcute) refused, in words for the admin. */
+export function phoneLoginError(err: unknown): string {
+  if (err instanceof LoginRefused) return err.message
+  if (tl.RpcError.is(err)) {
+    switch (err.text) {
+      case 'PHONE_NUMBER_INVALID':
+        return 'Неверный номер'
+      case 'PHONE_NUMBER_BANNED':
+        return 'Номер заблокирован Telegram'
+      case 'PHONE_NUMBER_UNOCCUPIED':
+        return 'На этот номер нет аккаунта Telegram — регистрация через панель не поддерживается'
+      case 'FLOOD_WAIT_%d':
+        return `Слишком много попыток — подождите ${Math.max(1, Math.ceil((err as tl.RpcError & { seconds?: number }).seconds! / 60))} мин`
+      case 'PHONE_PASSWORD_FLOOD':
+        return 'Слишком много попыток ввода пароля — подождите'
+      default:
+        return `Telegram отказал: ${err.code} ${err.text}`
+    }
+  }
+  const message = err instanceof Error ? err.message : String(err)
+  if (/signup is no longer supported/i.test(message)) return 'На этот номер нет аккаунта Telegram — регистрация через панель не поддерживается'
+  if (/payment is required/i.test(message)) return 'Telegram требует платный вход для неофициальных приложений — войдите сначала в официальном'
+  return message.slice(0, 300)
+}
+
+const isProfile = (v: SentCodeInfo | SessionProfile): v is SessionProfile => 'tgUserId' in v
+
+/**
+ * Runs one phone-number login: sends the code, takes the code, the cloud password, «send again» and cancel from
+ * the login's Redis channel (never stored), publishes progress as `phone.update`, and on success saves the account
+ * with its session and the cloud password that let it through.
+ */
+export function createPhoneLogin(deps: WorkerDeps, factory: PhoneClientFactory, options: PhoneLoginOptions = {}) {
+  const { settings, bus, logger } = deps
+  const kit = createLoginKit(deps)
+
+  const update = (loginId: string, state: PhoneLoginState, extra: PhoneUpdate = {}) => bus.publish({ type: 'phone.update', loginId, state, ...extra })
+  const codeInfo = (code: SentCodeInfo): PhoneUpdate => ({
+    deliveryType: code.deliveryType,
+    codeLength: code.codeLength,
+    nextType: code.nextType,
+    retryAfterSec: code.timeoutSec,
+  })
+
+  return {
+    async run({ loginId, phone, proxyId, adminId }: PhoneStart): Promise<void> {
+      const apiId = settings.get('telegram.own.apiId')
+      const apiHash = settings.get('telegram.own.apiHash')
+      if (!apiId || !apiHash) {
+        await update(loginId, 'failed', { message: 'Не задан свой api_id / api_hash (Настройки → Telegram)' })
+        return
+      }
+      const abort = new AbortController()
+      const timeoutMs = options.timeoutMs ?? parseDuration(settings.get('telegram.qrTimeout'))
+      const timer = setTimeout(() => abort.abort(new Error('expired')), timeoutMs)
+
+      // messages from the admin, in order; cancel cuts through at once
+      const inbox: LoginControl[] = []
+      let wake: (() => void) | null = null
+      const stopControl = await kit.subscribe(deps.redis, loginControlChannel(loginId), loginControlSchema, (message) => {
+        if (message.type === 'cancel') abort.abort(new Error('cancelled'))
+        else inbox.push(message)
+        wake?.()
+      })
+      const next = async (): Promise<LoginControl> => {
+        while (inbox.length === 0) {
+          if (abort.signal.aborted) throw abort.signal.reason
+          await new Promise<void>((resolve) => {
+            wake = resolve
+            abort.signal.addEventListener('abort', () => resolve(), { once: true })
+          })
+          wake = null
+        }
+        return inbox.shift()!
+      }
+
+      let client: PhoneClient | undefined
+      let code: SentCodeInfo | undefined
+      try {
+        const proxy = await kit.proxyEndpoint(proxyId)
+        const device = kit.device()
+        client = factory({ apiId, apiHash, device, proxy })
+        const phoneClient = client
+
+        let profile: SessionProfile | undefined
+        let cloudPassword: string | null = null
+        const first = await phoneClient.sendCode(phone)
+        if (isProfile(first)) profile = first
+        else {
+          code = first
+          if (code.deliveryType === 'email_required') {
+            throw new LoginRefused('Telegram требует привязать почту для входа — сделайте это в официальном приложении')
+          }
+          await update(loginId, 'code_sent', codeInfo(code))
+        }
+
+        // the code
+        let needsPassword = false
+        while (!profile && !needsPassword) {
+          const message = await next()
+          if (message.type === 'resend') {
+            if (code!.nextType === 'none') continue
+            code = await phoneClient.resendCode(phone, code!.phoneCodeHash)
+            await update(loginId, 'code_sent', codeInfo(code))
+          } else if (message.type === 'code') {
+            try {
+              profile = await phoneClient.signIn(phone, code!.phoneCodeHash, message.code)
+            } catch (err) {
+              if (tl.RpcError.is(err, 'PHONE_CODE_INVALID')) await update(loginId, 'code_invalid', codeInfo(code!))
+              else if (tl.RpcError.is(err, 'PHONE_CODE_EXPIRED')) await update(loginId, 'code_expired', codeInfo(code!))
+              else if (tl.RpcError.is(err, 'SESSION_PASSWORD_NEEDED')) needsPassword = true
+              else throw err
+            }
+          }
+        }
+
+        // the cloud password
+        if (!profile) {
+          const hint = await phoneClient.passwordHint().catch(() => null)
+          await update(loginId, 'password_needed', hint ? { hint } : {})
+          while (!profile) {
+            const message = await next()
+            if (message.type !== 'password') continue
+            try {
+              profile = await phoneClient.checkPassword(message.password)
+              cloudPassword = message.password
+            } catch (err) {
+              if (!tl.RpcError.is(err, 'PASSWORD_HASH_INVALID')) throw err
+              await update(loginId, 'password_invalid', hint ? { hint } : {})
+            }
+          }
+        }
+
+        const result = await kit.finish({ client: phoneClient, profile, source: 'phone', proxyId, adminId, cloudPassword, device })
+        client = undefined
+        if ('duplicateOf' in result) {
+          await update(loginId, 'failed', { message: 'Этот аккаунт уже есть в панели', accountId: result.duplicateOf })
+          return
+        }
+        await update(loginId, 'done', { accountId: result.accountId })
+        await options.onAccountCreated?.(result.accountId)
+      } catch (err) {
+        const reason = abort.signal.aborted ? String((abort.signal.reason as Error)?.message) : null
+        if (reason === 'cancelled') {
+          // let Telegram drop the pending code too
+          if (client && code) await client.cancelCode(phone, code.phoneCodeHash).catch(() => {})
+          await update(loginId, 'cancelled')
+        } else if (reason === 'expired') await update(loginId, 'expired')
+        else {
+          if (!(err instanceof LoginRefused)) logger.warn({ err, loginId }, 'phone: login failed')
+          await update(loginId, 'failed', { message: phoneLoginError(err) })
+        }
+      } finally {
+        clearTimeout(timer)
+        await stopControl()
+        await client?.destroy().catch(() => {})
+      }
+    },
+  }
+}

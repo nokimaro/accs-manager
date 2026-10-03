@@ -1,6 +1,7 @@
 import { MemoryStorage, TelegramClient } from '@mtcute/node'
 import type { AccountDevice } from '@workspace/db'
 import { proxyTransport, type ProxyEndpoint } from '../proxies/checker.ts'
+import { profileOf } from '../login/profile.ts'
 import type { SessionProfile } from '../telegram/session.ts'
 
 export interface QrSignInParams {
@@ -48,15 +49,7 @@ export const createMtcuteQrClient: QrClientFactory = (options) => {
         invalidPasswordCallback: params.invalidPasswordCallback,
         abortSignal: params.abortSignal,
       })
-      return {
-        tgUserId: user.id,
-        phone: user.phoneNumber ?? null,
-        username: user.username ?? null,
-        firstName: user.firstName || null,
-        lastName: user.lastName ?? null,
-        isPremium: user.isPremium,
-        dcId: user.dcId ?? null,
-      }
+      return profileOf(user)
     },
     async passwordHint() {
       const pwd = await client.call({ _: 'account.getPassword' })

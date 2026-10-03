@@ -13,6 +13,8 @@ import { AccountNotRunningError, createAccountManager, type SessionFactory } fro
 import { createCodeCollector } from './codes/collector.ts'
 import { housekeeping } from './housekeeping.ts'
 import { createNotifier } from './notify/notifier.ts'
+import { createPhoneLogin } from './login/phone.ts'
+import { createMtcutePhoneClient } from './login/phone-client.ts'
 import { createMtcuteQrClient } from './qr/client.ts'
 import { createQrLogin } from './qr/login.ts'
 import { createMtcuteSession } from './telegram/mtcute-session.ts'
@@ -65,6 +67,7 @@ const codeCollector = createCodeCollector(deps, { onCode: notifier.onCode })
 const accountManager = createAccountManager(deps, sessionFactory, { onSessionStarted: codeCollector.attach, onStatusChanged: notifier.onStatusChanged })
 
 const qrLogin = createQrLogin(deps, createMtcuteQrClient, { onAccountCreated: accountManager.sync })
+const phoneLogin = createPhoneLogin(deps, createMtcutePhoneClient, { onAccountCreated: accountManager.sync })
 
 const proxyChecker = createMtcuteProxyChecker(() => ({ apiId: settings.get('telegram.desktop.apiId'), apiHash: settings.get('telegram.desktop.apiHash') }))
 const proxyHealth = createProxyHealth(deps, proxyChecker, { onDown: accountManager.onProxyDown, onUp: accountManager.onProxyUp })
@@ -76,6 +79,7 @@ const runtime = createWorkerRuntime(deps, {
     'proxy.sync': async () => syncProxyStore(deps, fetch, proxyStoreHooks),
     'account.sync': async ({ accountId }) => accountManager.sync(accountId),
     'qr.start': async (start) => qrLogin.run(start),
+    'phone.start': async (start) => phoneLogin.run(start),
     'account.stop': async ({ accountId, logout }) => accountManager.stop(accountId, logout),
     'account.sessions': async ({ accountId }) => {
       try {
