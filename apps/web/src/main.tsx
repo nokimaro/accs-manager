@@ -6,7 +6,10 @@ import '@workspace/ui/globals.css'
 import { ThemeProvider } from '@/components/theme-provider.tsx'
 import { createQueryClient } from '@/lib/query-client'
 import { handleUnauthorized } from '@/lib/session'
+import { reloadOnceOnStaleChunks } from '@/lib/stale-chunks'
 import { routeTree } from './routeTree.gen'
+
+reloadOnceOnStaleChunks()
 
 const queryClient = createQueryClient(() => handleUnauthorized(queryClient, router))
 
