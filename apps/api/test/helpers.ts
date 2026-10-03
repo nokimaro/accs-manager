@@ -6,6 +6,7 @@ import { loadEnv, type Env } from '@workspace/shared/env'
 import { inject } from 'vitest'
 import { createApp } from '../src/app.ts'
 import type { AppDeps } from '../src/deps.ts'
+import { createAdmin } from '../src/services/admins.ts'
 
 export const ORIGIN = 'https://panel.test'
 
@@ -72,4 +73,24 @@ export async function send(app: TestApp['app'], path: string, o: RequestOptions 
     { method: o.method ?? (body ? 'POST' : 'GET'), headers, ...(body ? { body } : {}) },
     { incoming: { socket: { remoteAddress: o.ip ?? '10.0.0.1' } } },
   )
+}
+
+export function uniqueLogin(prefix = 'adm'): string {
+  return `${prefix}${randomUUID().slice(0, 8)}`
+}
+
+export function sessionCookie(res: Response): string {
+  const raw = res.headers.get('set-cookie') ?? ''
+  const match = /accs_session=([^;]+)/.exec(raw)
+  if (!match) throw new Error(`no session cookie in: ${raw}`)
+  return `accs_session=${match[1]}`
+}
+
+/** Creates an admin and logs in; returns its id, login and cookie. */
+export async function loginAs(ta: TestApp, password = 'correct horse battery'): Promise<{ id: string; login: string; cookie: string }> {
+  const login = uniqueLogin()
+  const admin = await createAdmin(ta.deps.db, { login, password })
+  const res = await send(ta.app, '/api/auth/login', { body: { login, password }, ip: `10.9.${Math.floor(Math.random() * 250)}.${Math.floor(Math.random() * 250)}` })
+  if (res.status !== 200) throw new Error(`login failed: ${res.status}`)
+  return { id: admin.id, login, cookie: sessionCookie(res) }
 }
