@@ -46,6 +46,7 @@ export function SettingsGroupCard({ group, data }: { group: SettingGroup; data: 
     onSuccess: (response) => {
       queryClient.setQueryData(settingsQueryOptions.queryKey, response)
       setDrafts(new Map())
+      setServerErrors({})
       toast.add({ title: 'Сохранено', description: group.label })
     },
     onError: (err) => {
@@ -86,7 +87,14 @@ export function SettingsGroupCard({ group, data }: { group: SettingGroup; data: 
           {save.isPending && <Spinner data-icon="inline-start" />}
           Сохранить
         </Button>
-        <Button variant="ghost" disabled={drafts.size === 0 || save.isPending} onClick={() => setDrafts(new Map())}>
+        <Button
+          variant="ghost"
+          disabled={drafts.size === 0 || save.isPending}
+          onClick={() => {
+            setDrafts(new Map())
+            setServerErrors({})
+          }}
+        >
           Отменить изменения
         </Button>
       </CardFooter>

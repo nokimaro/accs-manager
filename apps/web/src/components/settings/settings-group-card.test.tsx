@@ -85,4 +85,33 @@ describe('SettingsGroupCard', () => {
     await user.click(screen.getByRole('button', { name: 'Сохранить' }))
     expect(await screen.findByText('Слишком много')).toBeInTheDocument()
   })
+
+  it('sends a replaced secret and keeps Save disabled while it is empty', async () => {
+    const fetchMock = vi.fn(async () => json(snapshot()))
+    vi.stubGlobal('fetch', fetchMock)
+    const user = userEvent.setup()
+    renderGroup('notifications')
+    await user.click(screen.getByRole('button', { name: 'Задать' }))
+    expect(screen.getByRole('button', { name: 'Сохранить' })).toBeDisabled()
+    expect(screen.queryByText(/Пустое значение/)).not.toBeInTheDocument()
+    await user.type(screen.getByLabelText('Токен бота'), '42:NEW')
+    await user.click(screen.getByRole('button', { name: 'Сохранить' }))
+    await waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(1))
+    const [, init] = fetchMock.mock.calls[0] as unknown as [string, RequestInit]
+    expect(JSON.parse(String(init.body))).toEqual({ changes: { 'notify.botToken': '42:NEW' } })
+  })
+
+  it('turns clearing a nullable field into a reset and drops server errors on cancel', async () => {
+    const fetchMock = vi.fn(async () => json({ error: 'validation', fields: { 'notify.chatId': 'Плохой ID' } }, 400))
+    vi.stubGlobal('fetch', fetchMock)
+    const user = userEvent.setup()
+    renderGroup('notifications', snapshot({ 'notify.chatId': { value: '-100', isSet: true, overridden: true } }))
+    await user.clear(screen.getByLabelText('ID канала'))
+    await user.click(screen.getByRole('button', { name: 'Сохранить' }))
+    expect(await screen.findByText('Плохой ID')).toBeInTheDocument()
+    const [, init] = fetchMock.mock.calls[0] as unknown as [string, RequestInit]
+    expect(JSON.parse(String(init.body))).toEqual({ changes: { 'notify.chatId': null } })
+    await user.click(screen.getByRole('button', { name: 'Отменить изменения' }))
+    expect(screen.queryByText('Плохой ID')).not.toBeInTheDocument()
+  })
 })

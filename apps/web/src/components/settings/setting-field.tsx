@@ -46,6 +46,9 @@ export function SettingField({ settingKey, state, draft, error, onDraft }: Setti
   const overridden = draft ? draft.kind === 'set' : state.overridden
   const effect = EFFECT_HINT[meta.effect]
 
+  // a server-side override is removed with null; an unsaved local edit is simply dropped
+  const resetDraft = () => onDraft(state.overridden ? { kind: 'reset' } : undefined)
+
   const setText = (raw: string) => onDraft(raw === '' && nullable ? { kind: 'reset' } : { kind: 'set', value: raw })
   const setNumber = (raw: string) => onDraft(raw === '' && nullable ? { kind: 'reset' } : { kind: 'set', value: raw === '' ? Number.NaN : Number(raw) })
 
@@ -109,7 +112,7 @@ export function SettingField({ settingKey, state, draft, error, onDraft }: Setti
         <FieldSet data-invalid={error ? true : undefined}>
           <div className="flex flex-wrap items-center gap-2">
             <FieldLegend variant="label">{meta.label}</FieldLegend>
-            <StateBadges overridden={overridden} effect={effect} onReset={() => onDraft({ kind: 'reset' })} />
+            <StateBadges overridden={overridden} effect={effect} onReset={resetDraft} />
           </div>
           {meta.description && <FieldDescription>{meta.description}</FieldDescription>}
           {(meta.options ?? []).map((option) => (
@@ -133,7 +136,7 @@ export function SettingField({ settingKey, state, draft, error, onDraft }: Setti
       <FieldContent>
         <div className="flex flex-wrap items-center gap-2">
           <FieldLabel htmlFor={id}>{meta.label}</FieldLabel>
-          <StateBadges overridden={overridden} effect={effect} onReset={() => onDraft({ kind: 'reset' })} />
+          <StateBadges overridden={overridden} effect={effect} onReset={resetDraft} />
         </div>
         {hint && <FieldDescription>{hint}</FieldDescription>}
         {meta.type !== 'bool' && control}
