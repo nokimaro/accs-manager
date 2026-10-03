@@ -10,6 +10,7 @@ export default defineConfig({
       { test: { name: 'shared', root: './packages/shared', environment: 'node' } },
       { test: { name: 'db', root: './packages/db', environment: 'node', ...integration } },
       { test: { name: 'server', root: './packages/server', environment: 'node', ...integration } },
+      { test: { name: 'api', root: './apps/api', environment: 'node', ...integration } },
     ],
   },
 })
