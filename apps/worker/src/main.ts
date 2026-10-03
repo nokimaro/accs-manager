@@ -4,6 +4,8 @@ import { createCipher } from '@workspace/shared/crypto'
 import { loadEnv } from '@workspace/shared/env'
 import type { WorkerDeps } from './deps.ts'
 import { acquireSingletonLock } from './lock.ts'
+import { createMtcuteProxyChecker } from './proxies/checker.ts'
+import { createProxyHealth } from './proxies/health.ts'
 import { createWorkerRuntime } from './runtime.ts'
 
 const env = loadEnv()
@@ -29,7 +31,19 @@ const cipher = createCipher(env.APP_ENCRYPTION_KEY)
 const settings = await SettingsService.create({ db: database.db, cipher, bus, logger })
 
 const deps: WorkerDeps = { env, db: database.db, pool: database.pool, redis, queueRedis, bus, settings, cipher, logger }
-const runtime = createWorkerRuntime(deps, { commands: {}, maintenance: {} })
+const proxyChecker = createMtcuteProxyChecker(() => ({ apiId: settings.get('telegram.desktop.apiId'), apiHash: settings.get('telegram.desktop.apiHash') }))
+const proxyHealth = createProxyHealth(deps, proxyChecker)
+
+const runtime = createWorkerRuntime(deps, {
+  commands: {
+    'proxy.check': async ({ proxyId }) => proxyHealth.checkById(proxyId),
+  },
+  maintenance: {
+    'proxies.checkDue': async () => {
+      await proxyHealth.checkDue()
+    },
+  },
+})
 await runtime.start()
 const stopHeartbeat = startWorkerHeartbeat(redis, env.APP_VERSION)
 logger.info('worker: started')

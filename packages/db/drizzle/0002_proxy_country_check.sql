@@ -1,0 +1,1 @@
+ALTER TABLE "proxies" ADD COLUMN "tg_checked_at" timestamp with time zone;

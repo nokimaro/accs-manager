@@ -10,11 +10,12 @@
     "lint": "eslint ."
   },
   "dependencies": {
+    "@mtcute/core": "^0.32.3",
+    "@mtcute/node": "^0.32.3",
     "@workspace/db": "workspace:*",
     "@workspace/server": "workspace:*",
     "@workspace/shared": "workspace:*",
     "bullmq": "^6.3.11",
-    "drizzle-orm": "^0.45.3",
     "ioredis": "^6.0.0",
     "pg": "^8.23.1",
     "zod": "^4.6.5"

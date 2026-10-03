@@ -105,6 +105,8 @@ export const proxies = pgTable(
     latencyMs: integer('latency_ms'),
     /** country of the exit IP as Telegram sees it (help.getNearestDc); shown only */
     tgCountry: text('tg_country'),
+    /** when tgCountry was last asked from Telegram (a full MTProto exchange — done rarely) */
+    tgCheckedAt: ts('tg_checked_at'),
     lastError: text('last_error'),
     failStreak: integer('fail_streak').notNull().default(0),
     expiresAt: ts('expires_at'),

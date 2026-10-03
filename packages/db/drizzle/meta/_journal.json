@@ -15,6 +15,13 @@
       "when": 1791009292385,
       "tag": "0001_telegram",
       "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "7",
+      "when": 1791010222764,
+      "tag": "0002_proxy_country_check",
+      "breakpoints": true
     }
   ]
 }

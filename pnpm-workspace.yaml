@@ -12,3 +12,5 @@ allowBuilds:
   protobufjs: false
   # optional native msgpack speedup of bullmq; the pure-JS fallback is used
   msgpackr-extract: false
+  # @mtcute/node's optional sqlite storage; we store sessions in Postgres and it is never loaded
+  better-sqlite3: false
