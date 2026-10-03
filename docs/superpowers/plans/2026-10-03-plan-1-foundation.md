@@ -100,7 +100,7 @@
 
 ---
 
-### Задача 1: Каркас монорепо
+### Task 1: Каркас монорепо
 
 **Files:**
 - Create (из `shadcn init`): `apps/web/*`, `packages/ui/*`, `turbo.json`, `tsconfig.json`, `.prettierrc`, `.npmrc`, `AGENTS.md`
@@ -297,7 +297,7 @@ git commit -m "chore: scaffold monorepo (shadcn vite + base ui), pnpm 12, node 2
 
 ---
 
-### Задача 2: `@workspace/shared`: env, длительности, шифрование
+### Task 2: `@workspace/shared`: env, длительности, шифрование
 
 **Files:**
 - Create: `packages/shared/{package.json,tsconfig.json}`, `packages/shared/src/{duration,env,crypto}.ts`, `vitest.config.ts`
@@ -614,7 +614,7 @@ git add -A && git commit -m "feat(shared): infra env schema, durations, AES-256-
 
 ---
 
-### Задача 3: Ядро настроек: типы, хелперы, набор v1
+### Task 3: Ядро настроек: типы, хелперы, набор v1
 
 **Files:**
 - Create: `packages/shared/src/settings/{types,helpers,groups,definitions,validate,index}.ts`
@@ -1117,7 +1117,7 @@ git add -A && git commit -m "feat(shared): typed settings registry (zod 4) with 
 
 ---
 
-### Задача 4: `@workspace/db`: схема, миграции, тестовая инфраструктура
+### Task 4: `@workspace/db`: схема, миграции, тестовая инфраструктура
 
 **Files:**
 - Create: `packages/db/{package.json,tsconfig.json,drizzle.config.ts}`, `packages/db/src/{schema,client,migrate,migrate-cli,index,testing}.ts`, `packages/db/drizzle/*` (генерируется), `vitest.global-setup.ts`
@@ -1512,7 +1512,7 @@ git add -A && git commit -m "feat(db): drizzle schema (admins, sessions, audit, 
 
 ---
 
-### Задача 5: `@workspace/server`: логгер, Redis, шина событий
+### Task 5: `@workspace/server`: логгер, Redis, шина событий
 
 **Files:**
 - Create: `packages/shared/src/events.ts`, `packages/server/{package.json,tsconfig.json}`, `packages/server/src/{logger,redis,bus,index}.ts`
@@ -1813,7 +1813,7 @@ git add -A && git commit -m "feat(server): logger, redis factory, typed pub/sub 
 
 ---
 
-### Задача 6: SettingsService: хранение, шифрование секретов, применение без перезапуска
+### Task 6: SettingsService: хранение, шифрование секретов, применение без перезапуска
 
 **Files:**
 - Create: `packages/shared/src/api.ts`, `packages/server/src/settings-service.ts`
@@ -2250,7 +2250,7 @@ git add -A && git commit -m "feat(server): DB-backed typed SettingsService with 
 
 ---
 
-### Задача 7: Запись аудита и санитайзер
+### Task 7: Запись аудита и санитайзер
 
 **Files:**
 - Create: `packages/server/src/audit.ts`
@@ -2401,7 +2401,7 @@ git add -A && git commit -m "feat(server): audit writer with deep secret redacti
 
 ---
 
-### Задача 8: API: каркас Hono, healthz, защита Origin, запуск процесса
+### Task 8: API: каркас Hono, healthz, защита Origin, запуск процесса
 
 **Files:**
 - Create: `apps/api/{package.json,tsconfig.json}`, `apps/api/src/{deps,app,main}.ts`, `apps/api/src/lib/client-ip.ts`, `apps/api/src/middleware/origin.ts`, `apps/api/src/routes/{health,validation}.ts`
@@ -2846,7 +2846,7 @@ git add -A && git commit -m "feat(api): hono app shell, health check, origin gua
 
 ---
 
-### Задача 9: Вход админов: пароли, сессии, rate limit
+### Task 9: Вход админов: пароли, сессии, rate limit
 
 **Files:**
 - Create: `apps/api/src/lib/{password,sessions,rate-limit}.ts`, `apps/api/src/services/admins.ts`, `apps/api/src/middleware/auth.ts`, `apps/api/src/routes/auth.ts`
@@ -3434,7 +3434,7 @@ git add -A && git commit -m "feat(api): admin auth — argon2id, cookie sessions
 
 ---
 
-### Задача 10: Глобальный аудит и `GET /api/audit`
+### Task 10: Глобальный аудит и `GET /api/audit`
 
 **Files:**
 - Create: `apps/api/src/middleware/audit.ts`, `apps/api/src/routes/audit.ts`
@@ -3772,7 +3772,7 @@ git add -A && git commit -m "feat(api): global audit trail middleware and audit 
 
 ---
 
-### Задача 11: Управление админами
+### Task 11: Управление админами
 
 **Files:**
 - Create: `apps/api/src/routes/admins.ts`
@@ -3977,7 +3977,7 @@ git add -A && git commit -m "feat(api): admins management (create, disable, rese
 
 ---
 
-### Задача 12: API настроек и поток событий SSE
+### Task 12: API настроек и поток событий SSE
 
 **Files:**
 - Create: `apps/api/src/routes/{settings,events}.ts`
@@ -4269,7 +4269,7 @@ git add -A && git commit -m "feat(api): settings endpoints and live SSE event st
 
 ---
 
-### Задача 13: CLI: `admin:*` и `settings:*`
+### Task 13: CLI: `admin:*` и `settings:*`
 
 **Files:**
 - Create: `apps/api/src/cli.ts`
@@ -4540,7 +4540,7 @@ git add -A && git commit -m "feat(api): admin and settings CLI"
 
 ---
 
-### Задача 14: Docker, compose, `.env.example`, README
+### Task 14: Docker, compose, `.env.example`, README
 
 **Files:**
 - Create: `Dockerfile`, `.dockerignore`, `compose.yml`, `compose.dev.yml`, `.env.example`, `README.md`
@@ -4818,7 +4818,7 @@ git add -A && git commit -m "build: docker image, compose stack (accs-*), env ex
 
 ---
 
-### Задача 15: Web: вход, защищённый layout, навигация, главная
+### Task 15: Web: вход, защищённый layout, навигация, главная
 
 **Files:**
 - Create: `apps/web/src/lib/{api,query-client,auth,settings,use-event-stream}.ts`, `apps/web/src/components/{nav-tabs,mobile-nav,connection-indicator,user-menu,password-input,change-password-dialog,app-header,page-header,setup-alert}.tsx`,
@@ -5918,7 +5918,7 @@ git add -A && git commit -m "feat(web): app shell — login, guarded layout, nav
 
 ---
 
-### Задача 16: Web: раздел «Настройки»
+### Task 16: Web: раздел «Настройки»
 
 **Files:**
 - Create: `apps/web/src/components/settings/{draft.ts,setting-field.tsx,settings-group-card.tsx}`
@@ -6435,7 +6435,7 @@ git add -A && git commit -m "feat(web): settings page rendered from typed defini
 
 ---
 
-### Задача 17: Web: «Админы» и «Аудит»
+### Task 17: Web: «Админы» и «Аудит»
 
 **Files:**
 - Create: `apps/web/src/lib/{format,admins,audit}.ts`, `apps/web/src/components/data-table.tsx`, `apps/web/src/components/admins/{create-admin-dialog,reset-password-dialog}.tsx`
@@ -7135,7 +7135,7 @@ git add -A && git commit -m "feat(web): admins and audit pages on data tables"
 
 ---
 
-### Задача 18: E2E-smoke и CI
+### Task 18: E2E-smoke и CI
 
 **Files:**
 - Create: `playwright.config.ts`, `e2e/{fixtures.ts,smoke.spec.ts,tsconfig.json}`, `.github/workflows/ci.yml`
