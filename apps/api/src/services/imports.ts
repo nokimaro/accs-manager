@@ -8,7 +8,7 @@ import type { SettingsService } from '@workspace/server'
 import type { ConfirmImportInput, ImportBatchDto } from '@workspace/shared/accounts'
 import type { Cipher } from '@workspace/shared/crypto'
 import { parseDuration } from '@workspace/shared/duration'
-import { and, eq, inArray, isNull, notInArray } from '@workspace/db'
+import { and, eq, inArray, isNull, notInArray, sql } from '@workspace/db'
 import { DomainError } from '../lib/errors.ts'
 import { extractZip, ZipLimitError } from '../lib/zip.ts'
 
@@ -160,14 +160,24 @@ export async function getImport(db: Db, id: string): Promise<ImportBatchDto> {
   }
 }
 
-/** Free proxies: working, enabled, not bound to an account. */
+/**
+ * Free proxies, by the same rule as the account card and QR (`isProxyFree`): enabled, not bound, and working,
+ * not yet checked or only failing. Working ones first, then by latency — «auto» takes from the front.
+ */
 async function freeProxyIds(db: Db, exclude: string[]): Promise<string[]> {
   const rows = await db
     .select({ id: proxies.id })
     .from(proxies)
     .leftJoin(accounts, eq(accounts.proxyId, proxies.id))
-    .where(and(eq(proxies.status, 'ok'), isNull(proxies.disabledAt), isNull(accounts.id), ...(exclude.length ? [notInArray(proxies.id, exclude)] : [])))
-    .orderBy(proxies.latencyMs)
+    .where(
+      and(
+        inArray(proxies.status, ['ok', 'unchecked', 'failing']),
+        isNull(proxies.disabledAt),
+        isNull(accounts.id),
+        ...(exclude.length ? [notInArray(proxies.id, exclude)] : []),
+      ),
+    )
+    .orderBy(sql`${proxies.status} <> 'ok'`, sql`${proxies.latencyMs} nulls last`)
   return rows.map((r) => r.id)
 }
 

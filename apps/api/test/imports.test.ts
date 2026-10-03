@@ -124,6 +124,27 @@ describe('confirming an import', () => {
     expect(await again.json()).toMatchObject({ error: 'already_confirmed' })
   })
 
+  it('takes freshly added and failing proxies like the rest of the panel, "auto" preferring working ones', async () => {
+    const batch = await prepared([9101, 9102, 9103])
+    const [one, two, three] = batch.items
+    const unchecked = await proxy({ status: 'unchecked', latencyMs: null })
+    const failing = await proxy({ status: 'failing', latencyMs: 900 })
+    const ok = await proxy({ status: 'ok', latencyMs: 300 })
+    const res = await send(ta.app, `/api/imports/${batch.id}/confirm`, {
+      cookie,
+      body: {
+        items: [
+          { id: one!.id, decision: 'proxy', proxyId: unchecked.id },
+          { id: two!.id, decision: 'auto' },
+          { id: three!.id, decision: 'auto' },
+        ],
+      },
+    })
+    expect(res.status).toBe(200)
+    const byUser = Object.fromEntries((await ta.t.db.select().from(accounts)).map((a) => [a.tgUserId, a.proxyId]))
+    expect([byUser[9101], byUser[9102], byUser[9103]]).toEqual([unchecked.id, ok.id, failing.id])
+  })
+
   it('refuses duplicates, busy or broken proxies and an empty pool for "auto"', async () => {
     const first = await prepared([9001])
     await send(ta.app, `/api/imports/${first.id}/confirm`, { cookie, body: { items: [{ id: first.items[0]!.id, decision: 'direct' }] } })
