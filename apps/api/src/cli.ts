@@ -16,7 +16,17 @@ const USAGE = `Usage:
   cli settings:set <key> <value> | settings:set <key> --value-stdin
   cli settings:reset <key>
 
-<value> is parsed as JSON when possible (5, true, ["code"]), otherwise taken as a string.`
+<value> is converted by the setting's type: int → number, bool → true | false,
+multiselect → a,b,c or a JSON array; everything else is taken as a string.
+It may start with '-' (e.g. -1001234567890); '--' before it works as well.
+Secret settings are accepted only via --value-stdin.`
+
+const OPTIONS = {
+  login: { type: 'string' },
+  'password-stdin': { type: 'boolean' },
+  'value-stdin': { type: 'boolean' },
+  help: { type: 'boolean', short: 'h' },
+} as const
 
 class CliError extends Error {}
 
@@ -39,11 +49,45 @@ function requireLogin(login: string | undefined): string {
   return parsed.data
 }
 
-function parseValue(raw: string): unknown {
+/**
+ * `settings:set <key> <value>`: a value starting with a single '-' (a channel id like -1001234567890)
+ * is set aside before option parsing, which would reject it as an unknown short option.
+ */
+function parseCommandLine(argv: string[]) {
+  const [command, key, value] = argv
+  const dashValue = command === 'settings:set' && key !== undefined && !key.startsWith('-') && value !== undefined && /^-(?!-)/.test(value)
+  let parsed
   try {
-    return JSON.parse(raw)
-  } catch {
-    return raw
+    parsed = parseArgs({ args: dashValue ? argv.toSpliced(2, 1) : argv, allowPositionals: true, options: OPTIONS })
+  } catch (err) {
+    throw new CliError(`${(err as Error).message}\n\n${USAGE}`)
+  }
+  return { values: parsed.values, positionals: dashValue ? parsed.positionals.toSpliced(2, 0, value) : parsed.positionals }
+}
+
+/** Converts a raw CLI string to the setting's declared type; the setting schema then validates it. */
+function parseValue(key: string, raw: string): unknown {
+  if (!isSettingKey(key)) return raw
+  switch (settingsDef[key].meta.type) {
+    case 'int':
+      return /^-?\d+$/.test(raw.trim()) ? Number(raw) : raw
+    case 'bool':
+      return raw === 'true' ? true : raw === 'false' ? false : raw
+    case 'multiselect':
+      if (raw.trim().startsWith('[')) {
+        try {
+          return JSON.parse(raw)
+        } catch {
+          return raw
+        }
+      }
+      return raw
+        .split(',')
+        .map((v) => v.trim())
+        .filter(Boolean)
+    default:
+      // string, text, decimal, duration, select, secret
+      return raw
   }
 }
 
@@ -65,23 +109,19 @@ async function withSettings<T>(env: Env, database: DbHandle, fn: (settings: Sett
 }
 
 async function run(argv: string[]): Promise<void> {
-  const { positionals, values } = parseArgs({
-    args: argv,
-    allowPositionals: true,
-    options: {
-      login: { type: 'string' },
-      'password-stdin': { type: 'boolean' },
-      'value-stdin': { type: 'boolean' },
-      help: { type: 'boolean', short: 'h' },
-    },
-  })
+  const { positionals, values } = parseCommandLine(argv)
   const [command, ...args] = positionals
   if (!command || values.help) {
     console.log(USAGE)
     return
   }
 
-  const env = loadEnv()
+  let env: Env
+  try {
+    env = loadEnv()
+  } catch (err) {
+    throw new CliError((err as Error).message)
+  }
   const database = createDb(env.DATABASE_URL, { max: 2 })
   const { db } = database
   try {
@@ -130,12 +170,12 @@ async function run(argv: string[]): Promise<void> {
         if (!key) throw new CliError(USAGE)
         let value: unknown = null
         if (command === 'settings:set') {
-          if (values['value-stdin']) value = await readStdin()
+          if (values['value-stdin']) value = parseValue(key, await readStdin())
           else if (rawValue !== undefined) {
             if (isSettingKey(key) && settingsDef[key].meta.type === 'secret') {
               throw new CliError('secret values must be passed via --value-stdin, never as an argument')
             }
-            value = parseValue(rawValue)
+            value = parseValue(key, rawValue)
           } else throw new CliError('value is required')
         }
         await withSettings(env, database, async (settings) => {

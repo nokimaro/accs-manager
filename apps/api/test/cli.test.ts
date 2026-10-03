@@ -64,4 +64,27 @@ describe('cli', () => {
     expect((await cliRun(['settings:get', 'worker.connectConcurrency'])).stdout).toMatch(/= 5 {2}\(default\)/)
     await expect(cliRun(['settings:set', 'worker.connectConcurrency', '0'])).rejects.toMatchObject({ stderr: expect.stringMatching(/Не меньше 1/) })
   })
+
+  it('settings:set converts the value by the setting type and accepts values starting with "-"', async () => {
+    const get = async (key: string) => (await cliRun(['settings:get', key])).stdout
+    await cliRun(['settings:set', 'notify.chatId', '-1001234567890'])
+    expect(await get('notify.chatId')).toMatch(/^notify\.chatId = "-1001234567890"\n/)
+    await cliRun(['settings:set', 'notify.chatId', '--', '-1009'])
+    expect(await get('notify.chatId')).toMatch(/= "-1009"\n/)
+    await cliRun(['settings:set', 'notify.chatId', '--value-stdin'], '-1007\n')
+    expect(await get('notify.chatId')).toMatch(/= "-1007"\n/)
+    await cliRun(['settings:set', 'proxy.failThreshold', '--value-stdin'], '7\n')
+    expect(await get('proxy.failThreshold')).toMatch(/= 7\n/)
+    await cliRun(['settings:set', 'notify.enabled', 'true'])
+    expect(await get('notify.enabled')).toMatch(/= true\n/)
+    await cliRun(['settings:set', 'notify.events', 'code,banned'])
+    expect(await get('notify.events')).toMatch(/= \["code","banned"\]\n/)
+    await expect(cliRun(['settings:set', 'proxy.failThreshold', 'many'])).rejects.toMatchObject({ stderr: expect.stringMatching(/Нужно целое число/) })
+  })
+
+  it('reports a bad option as a message, not a stack trace', async () => {
+    const err = await cliRun(['admin:create', '--bogus']).catch((e: unknown) => e as { stderr: string })
+    expect(err).toMatchObject({ stderr: expect.stringMatching(/--bogus/) })
+    expect((err as { stderr: string }).stderr).not.toMatch(/^\s+at /m)
+  })
 })
