@@ -116,6 +116,54 @@ export function createMtcuteSession(options: MtcuteSessionOptions): TelegramSess
     async terminateSession(hash) {
       await client.call({ _: 'account.resetAuthorization', hash: Long.fromString(hash) })
     },
+    async passwordState() {
+      const pwd = await client.call({ _: 'account.getPassword' })
+      return {
+        hasPassword: Boolean(pwd.hasPassword),
+        hint: pwd.hint ?? null,
+        hasRecovery: Boolean(pwd.hasRecovery),
+        unconfirmedEmailPattern: pwd.emailUnconfirmedPattern ?? null,
+        pendingResetAt: pwd.pendingResetDate ? new Date(pwd.pendingResetDate * 1000) : null,
+      }
+    },
+    async recoveryEmail(password) {
+      const pwd = await client.call({ _: 'account.getPassword' })
+      const settings = await client.call({ _: 'account.getPasswordSettings', password: await client.computeSrpParams(pwd, password) })
+      return settings.email ?? null
+    },
+    async setPassword({ current, next, hint, email }) {
+      const pwd = await client.call({ _: 'account.getPassword' })
+      const algo = pwd.newAlgo
+      try {
+        await client.call({
+          _: 'account.updatePasswordSettings',
+          password: current === null ? { _: 'inputCheckPasswordEmpty' } : await client.computeSrpParams(pwd, current),
+          newSettings: {
+            _: 'account.passwordInputSettings',
+            newAlgo: algo,
+            newPasswordHash: await client.computeNewPasswordHash(algo, next),
+            hint: hint ?? '',
+            ...(email !== null ? { email } : {}),
+          },
+        })
+        return null
+      } catch (err) {
+        // the password is set; the recovery email waits for the code (EMAIL_UNCONFIRMED_<code length>)
+        if (!tl.RpcError.is(err, 'EMAIL_UNCONFIRMED_%d')) throw err
+        const length = /EMAIL_UNCONFIRMED_(\d+)/.exec(err.message)?.[1]
+        const after = await client.call({ _: 'account.getPassword' })
+        return { emailCodeLength: length ? Number(length) : null, emailPattern: after.emailUnconfirmedPattern ?? null }
+      }
+    },
+    async confirmPasswordEmail(code) {
+      await client.verifyPasswordEmail(code)
+    },
+    async resendPasswordEmail() {
+      await client.resendPasswordEmail()
+    },
+    async cancelPasswordEmail() {
+      await client.cancelPasswordEmail()
+    },
     async logOut() {
       await client.logOut()
     },

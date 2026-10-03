@@ -3,7 +3,7 @@ import type { AccountSessionDto } from '@workspace/shared/accounts'
 import { vi } from 'vitest'
 import type { AccountRow, SessionFactory } from '../src/accounts/manager.ts'
 import type { ProxyEndpoint } from '../src/proxies/checker.ts'
-import type { FreezeInfo, IncomingMessage, SessionProfile, TelegramSession } from '../src/telegram/session.ts'
+import type { FreezeInfo, IncomingMessage, PasswordState, SessionProfile, SetPasswordParams, TelegramSession } from '../src/telegram/session.ts'
 
 export const rpcError = (code: number, text: string) => new tl.RpcError(code, text)
 
@@ -64,6 +64,48 @@ export class FakeSession implements TelegramSession {
   stop = vi.fn(async () => {
     this.stopped = true
     this.rejectStart?.(new Error('Session is reset'))
+  })
+
+  /** the account's cloud password as Telegram keeps it; the recovery email waits for code 424242 */
+  twoFa = {
+    password: null as string | null,
+    hint: null as string | null,
+    email: null as string | null,
+    pending: null as { email: string; code: string } | null,
+    pendingResetAt: null as Date | null,
+    tooFreshSec: 0,
+  }
+  passwordState = vi.fn(
+    async (): Promise<PasswordState> => ({
+      hasPassword: this.twoFa.password !== null,
+      hint: this.twoFa.hint,
+      hasRecovery: this.twoFa.email !== null,
+      unconfirmedEmailPattern: this.twoFa.pending ? 'm***@example.com' : null,
+      pendingResetAt: this.twoFa.pendingResetAt,
+    }),
+  )
+  recoveryEmail = vi.fn(async (password: string) => {
+    if (password !== this.twoFa.password) throw rpcError(400, 'PASSWORD_HASH_INVALID')
+    return this.twoFa.email
+  })
+  setPassword = vi.fn(async (p: SetPasswordParams) => {
+    if (this.twoFa.tooFreshSec) throw Object.assign(rpcError(400, 'SESSION_TOO_FRESH_%d'), { seconds: this.twoFa.tooFreshSec })
+    if (this.twoFa.password !== null && p.current !== this.twoFa.password) throw rpcError(400, 'PASSWORD_HASH_INVALID')
+    if (p.email !== null && !p.email.includes('@')) throw rpcError(400, 'EMAIL_INVALID')
+    this.twoFa.password = p.next
+    this.twoFa.hint = p.hint
+    if (p.email === null) return null
+    this.twoFa.pending = { email: p.email, code: '424242' }
+    return { emailCodeLength: 6, emailPattern: 'm***@example.com' }
+  })
+  confirmPasswordEmail = vi.fn(async (code: string) => {
+    if (!this.twoFa.pending || code !== this.twoFa.pending.code) throw rpcError(400, 'CODE_INVALID')
+    this.twoFa.email = this.twoFa.pending.email
+    this.twoFa.pending = null
+  })
+  resendPasswordEmail = vi.fn(async () => {})
+  cancelPasswordEmail = vi.fn(async () => {
+    this.twoFa.pending = null
   })
 
   emitMessage(m: IncomingMessage) {

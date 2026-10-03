@@ -39,6 +39,8 @@ export interface AccountManager {
   sessions(accountId: string): Promise<AccountSessionDto[]>
   terminateSession(accountId: string, hash: string): Promise<void>
   isRunning(accountId: string): boolean
+  /** the live client of a connected account (cloud password operations), if any */
+  runningSession(accountId: string): TelegramSession | undefined
   stopAll(): Promise<void>
 }
 
@@ -319,6 +321,7 @@ export function createAccountManager(deps: WorkerDeps, factory: SessionFactory, 
       await session.terminateSession(hash)
     },
     isRunning: (accountId) => running.has(accountId),
+    runningSession: (accountId) => running.get(accountId),
     async stopAll() {
       shuttingDown = true
       for (const id of [...retries.keys()]) clearRetry(id)
