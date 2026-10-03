@@ -1,16 +1,16 @@
 import { QueryClientProvider } from '@tanstack/react-query'
-import { createMemoryHistory, createRouter, RouterProvider } from '@tanstack/react-router'
+import { createMemoryHistory, RouterProvider } from '@tanstack/react-router'
 import { render, screen, waitFor } from '@testing-library/react'
 import { afterEach, expect, it, vi } from 'vitest'
 import { createQueryClient } from '@/lib/query-client'
+import { createAppRouter } from '@/lib/router'
 import { handleUnauthorized } from '@/lib/session'
-import { routeTree } from '@/routeTree.gen'
 
 const json = (body: unknown, status = 200) => new Response(JSON.stringify(body), { status, headers: { 'content-type': 'application/json' } })
 
 function setup(path: string) {
   const queryClient = createQueryClient(() => handleUnauthorized(queryClient, router))
-  const router = createRouter({ routeTree, context: { queryClient }, history: createMemoryHistory({ initialEntries: [path] }) })
+  const router = createAppRouter(queryClient, createMemoryHistory({ initialEntries: [path] }))
   render(
     <QueryClientProvider client={queryClient}>
       <RouterProvider router={router} />
@@ -55,6 +55,7 @@ const lastSource = () => FakeEventSource.instances.at(-1)!
 
 afterEach(() => {
   vi.unstubAllGlobals()
+  vi.restoreAllMocks()
   FakeEventSource.instances = []
 })
 
@@ -138,4 +139,28 @@ it('refetches data after the stream reconnects (events may have been missed)', a
   lastSource().fail(FakeEventSource.CONNECTING)
   lastSource().emit('ready')
   await waitFor(() => expect(settingsCalls()).toBe(2))
+})
+
+it('shows an error screen with a retry instead of a blank page when the API is down', async () => {
+  vi.spyOn(console, 'error').mockImplementation(() => {}) // the router logs the caught 502
+  vi.spyOn(console, 'warn').mockImplementation(() => {})
+  let up = false
+  vi.stubGlobal('EventSource', SilentEventSource)
+  vi.stubGlobal('fetch', vi.fn(async (url: string) => {
+    if (!up) return json({ error: 'internal' }, 502)
+    return url.endsWith('/auth/me') ? json({ id: 'a1', login: 'root' }) : json({ items: {} })
+  }))
+  setup('/')
+  expect(await screen.findByText('Не удалось загрузить страницу')).toBeInTheDocument()
+  up = true
+  screen.getByRole('button', { name: 'Повторить' }).click()
+  expect(await screen.findByRole('heading', { name: 'Коды' })).toBeInTheDocument()
+})
+
+it('shows «not found» for an unknown address', async () => {
+  vi.stubGlobal('EventSource', SilentEventSource)
+  vi.stubGlobal('fetch', vi.fn(async (url: string) => (url.endsWith('/auth/me') ? json({ id: 'a1', login: 'root' }) : json({ items: {} }))))
+  setup('/no-such-page')
+  expect(await screen.findByText('Страница не найдена')).toBeInTheDocument()
+  expect(screen.getByRole('button', { name: 'На главную' })).toHaveAttribute('href', '/')
 })
