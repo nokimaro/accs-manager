@@ -25,4 +25,6 @@ docker compose up -d --build
 docker compose exec accs-api node apps/api/src/cli.ts admin:create --login admin
 ```
 
+`POSTGRES_PASSWORD` попадает в строку подключения как есть — используйте только URL-безопасные символы (например, `openssl rand -hex 24`).
+
 Остальные параметры (Telegram, уведомления, прокси, лимиты) — в панели, раздел «Настройки», или `cli settings:set`.
