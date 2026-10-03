@@ -1,4 +1,4 @@
-import { writeAudit, type AuditActor } from '@workspace/server'
+import { sanitizeForAudit, writeAudit, type AuditActor } from '@workspace/server'
 import type { Context } from 'hono'
 import { createMiddleware } from 'hono/factory'
 import { routePath } from 'hono/route'
@@ -6,6 +6,7 @@ import type { AppEnv, AuditOverrides } from '../deps.ts'
 
 const MUTATING = new Set(['POST', 'PUT', 'PATCH', 'DELETE'])
 const MAX_PAYLOAD_CHARS = 16_384
+const MAX_BODY_BYTES = 65_536
 
 /**
  * Per-route audit metadata. Also marks a GET as sensitive (audited).
@@ -28,6 +29,10 @@ export function audited(action: string, options: { target?: [type: string, param
 }
 
 async function readBody(c: Context<AppEnv>): Promise<unknown> {
+  const declared = Number(c.req.header('content-length') ?? 0)
+  // never buffer a large body just for the audit log (uploads, abuse); handlers that need it read it themselves
+  if (declared > MAX_BODY_BYTES) return { omitted: true, contentLength: declared }
+
   const type = c.req.header('content-type') ?? ''
   try {
     if (type.includes('application/json')) return await c.req.json()
@@ -61,7 +66,8 @@ export const auditTrail = createMiddleware<AppEnv>(async (c, next) => {
       action: overrides.action ?? `${c.req.method} ${routePath(c)}`,
       targetType: overrides.targetType ?? null,
       targetId: overrides.targetId ?? null,
-      payload: capPayload(payload),
+      // sanitize BEFORE capping: a truncated preview is a raw JSON string that redaction can no longer see into
+      payload: capPayload(sanitizeForAudit(payload)),
       ip: c.get('clientIp'),
       userAgent: c.req.header('user-agent') ?? null,
       statusCode: c.res.status,
