@@ -148,10 +148,12 @@ jobs:
           printf '%s\n' "$GHCR_TOKEN" | ssh -i ~/.ssh/deploy_key -o IdentitiesOnly=yes -o BatchMode=yes "accs-deploy@$DEPLOY_HOST" "deploy $GITHUB_SHA"
       - name: Wait for panel.159.team to serve the new version
         run: |
+          # both the api and the worker (its Redis heartbeat) must run the new commit
           for _ in $(seq 1 36); do
-            version=$(curl -fsS --max-time 5 https://panel.159.team/api/healthz | jq -r .version || true)
-            if [ "$version" = "$GITHUB_SHA" ]; then echo "live: $version"; exit 0; fi
+            health=$(curl -fsS --max-time 5 https://panel.159.team/api/healthz || true)
+            versions=$(printf '%s' "$health" | jq -r '"\(.version) \(.workerVersion)"' 2>/dev/null || true)
+            if [ "$versions" = "$GITHUB_SHA $GITHUB_SHA" ]; then echo "live: api and worker at $GITHUB_SHA"; exit 0; fi
             sleep 5
           done
-          echo "panel.159.team still reports ${version:-nothing}, expected $GITHUB_SHA" >&2
+          echo "panel.159.team reports api/worker ${versions:-nothing}, expected $GITHUB_SHA" >&2
           exit 1

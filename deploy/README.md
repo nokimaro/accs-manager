@@ -6,9 +6,11 @@
    `ghcr.io/nokimaro/accs-manager:<sha>` и `:main`.
 2. **deploy** (GitHub environment `production`, только ветка `main`) заходит по SSH на сервер ключом,
    который умеет ровно одно — `deploy <sha>` (forced command `deploy-ssh`), и затем ждёт, пока
-   `https://panel.159.team/api/healthz` вернёт `version` = этот коммит.
+   `https://panel.159.team/api/healthz` вернёт `version` и `workerVersion` = этот коммит.
 3. На сервере `deploy-ssh` проверяет, что коммит есть в `origin/main`, переключает клон репозитория на него
-   и запускает `deploy.sh`: `docker compose pull` → `up -d --wait` (сначала миграции `accs-migrate`, затем `accs-api`).
+   и запускает `deploy.sh`: `docker compose pull` → `up -d --wait` (сначала миграции `accs-migrate`, затем `accs-api`
+   и `accs-worker`). Старый воркер останавливается до старта нового (graceful, до 30 с): два воркера никогда не держат
+   одни и те же Telegram-сессии, а advisory lock в БД страхует от второго экземпляра.
 
 ## Сервер
 
@@ -31,7 +33,11 @@ Staging-бокс HOSTKEY (Ubuntu 24.04), общий с p2c — их контей
 20242 — p2c-pgon, 20243 — наш.
 
 **`APP_ENCRYPTION_KEY` храните отдельно от дампов БД** (менеджер паролей): без него зашифрованные настройки
-(токен бота, api_hash, ключ proxy-store) не восстановить.
+(токен бота, api_hash, ключ proxy-store) и auth keys Telegram-аккаунтов (`account_auth`) не восстановить —
+аккаунты придётся добавлять заново.
+
+**Воркер упал или `worker: down`:** `docker logs accs-worker`; `docker restart accs-worker`. Пока воркер лежит,
+API работает, но коды не собираются и прокси не проверяются; после старта он догружает пропущенные коды.
 
 ## Частые действия
 
@@ -41,6 +47,8 @@ cd /opt/accs-manager
 cat deployed-sha
 sudo -u accs-deploy docker compose --project-directory repo -f repo/compose.yml -f repo/compose.prod.yml --env-file .env ps
 docker logs --tail 100 accs-api
+docker logs --tail 100 accs-worker      # «accounts: connected», «codes: watching @VerificationCodes»
+curl -s http://127.0.0.1:3300/api/healthz   # worker: ok|down, workerVersion
 
 # админ (пароль — из stdin, в историю shell не попадает)
 docker exec -i accs-api node apps/api/src/cli.ts admin:create --login <login> --password-stdin

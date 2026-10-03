@@ -17,7 +17,7 @@ test('deep link survives the login redirect', async ({ page }) => {
 
 test('navigates between sections', async ({ page, isMobile }) => {
   await signIn(page)
-  for (const section of ['Аудит', 'Админы', 'Настройки', 'Коды']) await goToSection(page, section, isMobile)
+  for (const section of ['Аккаунты', 'Прокси', 'Аудит', 'Админы', 'Настройки', 'Коды']) await goToSection(page, section, isMobile)
 })
 
 test('saves a setting, keeps it after reload, resets it back', async ({ page, isMobile }) => {

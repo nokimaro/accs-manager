@@ -13,13 +13,13 @@ describe('app shell', () => {
   it('reports health of Postgres and Redis', async () => {
     const res = await send(ta.app, '/api/healthz')
     expect(res.status).toBe(200)
-    expect(await res.json()).toEqual({ ok: true, version: 'dev', worker: 'down' })
+    expect(await res.json()).toEqual({ ok: true, version: 'dev', worker: 'down', workerVersion: null })
   })
 
-  it('reports the worker as up while its heartbeat is fresh', async () => {
-    await ta.deps.redis.set('accs:worker:heartbeat', JSON.stringify({ at: new Date().toISOString(), pid: 1, version: 'dev' }), 'PX', 5_000)
+  it('reports the worker and its version while its heartbeat is fresh', async () => {
+    await ta.deps.redis.set('accs:worker:heartbeat', JSON.stringify({ at: new Date().toISOString(), pid: 1, version: 'abc1234' }), 'PX', 5_000)
     try {
-      expect(await (await send(ta.app, '/api/healthz')).json()).toMatchObject({ worker: 'ok' })
+      expect(await (await send(ta.app, '/api/healthz')).json()).toMatchObject({ worker: 'ok', workerVersion: 'abc1234' })
     } finally {
       await ta.deps.redis.del('accs:worker:heartbeat')
     }
