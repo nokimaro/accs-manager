@@ -1,3 +1,5 @@
+import { tmpdir } from 'node:os'
+import { join } from 'node:path'
 import { createDb } from '@workspace/db'
 import { createEventBus, createLogger, createRedis, exitOnFatalErrors, SettingsService, startWorkerHeartbeat } from '@workspace/server'
 import { createCipher } from '@workspace/shared/crypto'
@@ -110,7 +112,8 @@ const runtime = createWorkerRuntime(deps, {
 })
 await runtime.start()
 notifier.start()
-const stopHeartbeat = startWorkerHeartbeat(redis, env.APP_VERSION)
+// the file is what the container healthcheck in compose.yml looks at
+const stopHeartbeat = startWorkerHeartbeat(redis, env.APP_VERSION, { aliveFile: join(tmpdir(), 'accs-worker-alive') })
 logger.info('worker: started')
 // connects in the background: commands and maintenance keep flowing meanwhile
 accountManager.startAll().catch((err: unknown) => logger.error({ err }, 'worker: starting accounts failed'))

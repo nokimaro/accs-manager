@@ -87,9 +87,15 @@ services:
     init: true
     command: ["node", "apps/worker/src/main.ts"]
     stop_grace_period: 30s
-    # the image healthcheck probes the api port; the worker reports through its Redis heartbeat instead
+    # no port to probe (the image healthcheck is the api's): every heartbeat touches /tmp/accs-worker-alive, the
+    # check wants it under a minute old. `docker compose up --wait` (CI, deploy.sh) needs a healthcheck on every service.
     healthcheck:
-      disable: true
+      test: ["CMD", "node", "-e", "process.exit(Date.now() - require('node:fs').statSync('/tmp/accs-worker-alive').mtimeMs < 60000 ? 0 : 1)"]
+      interval: 15s
+      timeout: 5s
+      retries: 3
+      start_period: 60s
+      start_interval: 2s
     environment:
       NODE_ENV: production
       DATABASE_URL: *db-url

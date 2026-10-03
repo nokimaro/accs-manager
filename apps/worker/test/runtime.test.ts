@@ -1,3 +1,6 @@
+import { existsSync, statSync } from 'node:fs'
+import { tmpdir } from 'node:os'
+import { join } from 'node:path'
 import { createCommandClient, readWorkerHeartbeat, startWorkerHeartbeat } from '@workspace/server'
 import { Queue } from 'bullmq'
 import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest'
@@ -50,6 +53,16 @@ it('heartbeat keeps a short-lived key and removes it on stop', async () => {
   expect(await w.deps.redis.pttl(key)).toBeGreaterThan(30_000)
   await stop()
   expect(await readWorkerHeartbeat(w.deps.redis, key)).toBeNull()
+})
+
+it('heartbeat also touches the file the container healthcheck reads, and removes it on stop', async () => {
+  const aliveFile = join(tmpdir(), `accs-worker-alive-${w.deps.queuePrefix}`)
+  const stop = startWorkerHeartbeat(w.deps.redis, 'abc123', { intervalMs: 50, key: `test:heartbeat:file:${w.deps.queuePrefix}`, aliveFile })
+  await vi.waitFor(() => expect(existsSync(aliveFile)).toBe(true))
+  const first = statSync(aliveFile).mtimeMs
+  await vi.waitFor(() => expect(statSync(aliveFile).mtimeMs).toBeGreaterThan(first))
+  await stop()
+  expect(existsSync(aliveFile)).toBe(false)
 })
 
 describe('runtime', () => {

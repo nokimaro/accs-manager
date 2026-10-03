@@ -1,3 +1,4 @@
+import { rm, writeFile } from 'node:fs/promises'
 import type { Redis } from './redis.ts'
 
 /** The worker refreshes this key; the api reads it to show whether the worker is alive. */
@@ -10,12 +11,20 @@ export interface Heartbeat {
   version: string
 }
 
-/** `key` is for tests that share one Redis. */
-export function startWorkerHeartbeat(redis: Redis, version: string, options: { intervalMs?: number; key?: string } = {}): () => Promise<void> {
+/**
+ * `key` is for tests that share one Redis. `aliveFile` is touched on every beat: the worker has no port, so its
+ * container healthcheck (needed by `docker compose up --wait`) checks that this file is fresh.
+ */
+export function startWorkerHeartbeat(
+  redis: Redis,
+  version: string,
+  options: { intervalMs?: number; key?: string; aliveFile?: string } = {},
+): () => Promise<void> {
   const key = options.key ?? HEARTBEAT_KEY
   const beat = () => {
     const value: Heartbeat = { at: new Date().toISOString(), pid: process.pid, version }
     redis.set(key, JSON.stringify(value), 'PX', TTL_MS).catch(() => {})
+    if (options.aliveFile) writeFile(options.aliveFile, value.at).catch(() => {})
   }
   beat()
   const timer = setInterval(beat, options.intervalMs ?? 15_000)
@@ -23,6 +32,7 @@ export function startWorkerHeartbeat(redis: Redis, version: string, options: { i
   return async () => {
     clearInterval(timer)
     await redis.del(key).catch(() => {})
+    if (options.aliveFile) await rm(options.aliveFile, { force: true })
   }
 }
 

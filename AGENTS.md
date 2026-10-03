@@ -188,7 +188,8 @@ CLI (`apps/api/src/cli.ts`): `admin:create|admin:reset-password|admin:disable --
   `accs-migrate` применяет миграции, затем `accs-api` и `accs-worker`; prune старых образов проекта).
 - Compose на сервере: `compose.yml` + `compose.prod.yml` (образ из `ACCS_IMAGE`, `build: !reset`, ротация логов
   json-file 10m×5). Контейнеры `accs-postgres`, `accs-redis`, `accs-migrate`, `accs-api`, `accs-worker` (тот же
-  образ, `node apps/worker/src/main.ts`, без портов, `stop_grace_period: 30s`); тома `accs-pgdata`,
+  образ, `node apps/worker/src/main.ts`, без портов, `stop_grace_period: 30s`; healthcheck — свежесть файла
+  `/tmp/accs-worker-alive`, который трогает heartbeat: `up --wait` требует healthcheck у каждого сервиса); тома `accs-pgdata`,
   `accs-redisdata`; сеть `accs-net`.
 - Занятые порты на боксе: 3000/3001/3100/5432/8080 — p2c; наш API — `127.0.0.1:3300`.
 - `APP_ENCRYPTION_KEY` хранить отдельно от дампов БД: без него зашифрованные настройки не восстановить.
