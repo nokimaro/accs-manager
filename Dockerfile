@@ -9,6 +9,7 @@ WORKDIR /app
 FROM base AS manifests
 COPY package.json pnpm-lock.yaml pnpm-workspace.yaml ./
 COPY apps/api/package.json apps/api/
+COPY apps/worker/package.json apps/worker/
 COPY apps/web/package.json apps/web/
 COPY packages/db/package.json packages/db/
 COPY packages/server/package.json packages/server/
@@ -24,9 +25,9 @@ COPY packages/shared packages/shared
 COPY apps/web apps/web
 RUN pnpm --filter web build
 
-# ---- production deps of api and its workspace packages (symlinked, not injected) ----
+# ---- production deps of api, worker and their workspace packages (symlinked, not injected) ----
 FROM manifests AS api-deps
-RUN --mount=type=cache,id=pnpm,target=/pnpm/store pnpm install --frozen-lockfile --prod --filter "api..."
+RUN --mount=type=cache,id=pnpm,target=/pnpm/store pnpm install --frozen-lockfile --prod --filter "api..." --filter "worker..."
 
 # ---- runtime: Node runs the TypeScript sources directly (type stripping) ----
 FROM node:26-trixie-slim AS api
@@ -41,6 +42,7 @@ COPY --chown=node:node packages/db/src packages/db/src
 COPY --chown=node:node packages/db/drizzle packages/db/drizzle
 COPY --chown=node:node packages/server/src packages/server/src
 COPY --chown=node:node apps/api/src apps/api/src
+COPY --chown=node:node apps/worker/src apps/worker/src
 COPY --from=web-build --chown=node:node /app/apps/web/dist apps/web/dist
 USER node
 EXPOSE 3000

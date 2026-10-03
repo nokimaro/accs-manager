@@ -78,6 +78,31 @@ services:
       accs-redis:
         condition: service_healthy
 
+  # Telegram sessions, proxy checks, notifications. One instance only (pg advisory lock); stopped before a
+  # new one starts, so two clients never share an auth key. No ports.
+  accs-worker:
+    <<: *api-image
+    container_name: accs-worker
+    restart: unless-stopped
+    init: true
+    command: ["node", "apps/worker/src/main.ts"]
+    stop_grace_period: 30s
+    # the image healthcheck probes the api port; the worker reports through its Redis heartbeat instead
+    healthcheck:
+      disable: true
+    environment:
+      NODE_ENV: production
+      DATABASE_URL: *db-url
+      REDIS_URL: redis://accs-redis:6379
+      APP_ENCRYPTION_KEY: ${APP_ENCRYPTION_KEY:?set APP_ENCRYPTION_KEY in .env}
+      PUBLIC_ORIGIN: ${PUBLIC_ORIGIN:?set PUBLIC_ORIGIN in .env}
+      LOG_LEVEL: ${LOG_LEVEL:-info}
+    depends_on:
+      accs-migrate:
+        condition: service_completed_successfully
+      accs-redis:
+        condition: service_healthy
+
 volumes:
   accs-pgdata:
     name: accs-pgdata

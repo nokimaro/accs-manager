@@ -19,3 +19,7 @@ services:
     image: ${ACCS_IMAGE:?ACCS_IMAGE is set by deploy.sh}
     build: !reset null
     logging: *logging
+  accs-worker:
+    image: ${ACCS_IMAGE:?ACCS_IMAGE is set by deploy.sh}
+    build: !reset null
+    logging: *logging
