@@ -26,6 +26,16 @@ describe('createCipher', () => {
     expect(() => c.decrypt([v, iv, flipped.toString('base64'), tag].join(':'))).toThrow()
   })
 
+  it('rejects a truncated auth tag or a malformed IV', () => {
+    const c = createCipher(key)
+    const [v, iv, ct, tag] = c.encrypt('hello').split(':') as [string, string, string, string]
+    // a GCM tag cut to 12 bytes still authenticates unless the length is pinned
+    const shortTag = Buffer.from(tag, 'base64').subarray(0, 12).toString('base64')
+    expect(() => c.decrypt([v, iv, ct, shortTag].join(':'))).toThrow()
+    const shortIv = Buffer.from(iv, 'base64').subarray(0, 8).toString('base64')
+    expect(() => c.decrypt([v, shortIv, ct, tag].join(':'))).toThrow()
+  })
+
   it('fails with another key', () => {
     const token = createCipher(key).encrypt('hello')
     expect(() => createCipher(randomBytes(32).toString('base64')).decrypt(token)).toThrow()
