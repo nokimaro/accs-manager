@@ -3,6 +3,7 @@ import { createFileRoute, Outlet, redirect } from '@tanstack/react-router'
 import { toast } from '@workspace/ui/components/toast'
 import { AppHeader } from '@/components/app-header'
 import { meQueryOptions, recheckSession } from '@/lib/auth'
+import { proxiesQueryOptions } from '@/lib/proxies'
 import { settingsQueryOptions } from '@/lib/settings'
 import { useEventStream } from '@/lib/use-event-stream'
 
@@ -24,6 +25,7 @@ function AuthedLayout() {
         void queryClient.invalidateQueries({ queryKey: settingsQueryOptions.queryKey })
         if (event.by !== me.id) toast.add({ title: 'Настройки изменены', description: 'Другой админ или CLI обновил настройки.' })
       }
+      if (event.type === 'proxies.changed') void queryClient.invalidateQueries({ queryKey: proxiesQueryOptions.queryKey })
     },
     // a revoked session ends at the global 401 handler (→ /login)
     onSessionLost: () => void recheckSession(queryClient),

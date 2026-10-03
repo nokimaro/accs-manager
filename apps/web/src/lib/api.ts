@@ -30,6 +30,7 @@ export async function api<T>(path: string, init: RequestInit & { json?: unknown 
     }
     throw new ApiError(res.status, body)
   }
-  if (res.status === 204) return undefined as T
-  return (await res.json()) as T
+  // 202/204 and other empty answers carry no JSON
+  const text = await res.text()
+  return (text ? JSON.parse(text) : undefined) as T
 }
