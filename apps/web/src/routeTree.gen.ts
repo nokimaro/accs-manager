@@ -12,11 +12,12 @@ import { Route as rootRouteImport } from './routes/__root'
 import { Route as AuthedRouteImport } from './routes/_authed'
 import { Route as LoginRouteImport } from './routes/login'
 import { Route as AuthedIndexRouteImport } from './routes/_authed/index'
-import { Route as AuthedAccountsRouteImport } from './routes/_authed/accounts'
 import { Route as AuthedAdminsRouteImport } from './routes/_authed/admins'
 import { Route as AuthedAuditRouteImport } from './routes/_authed/audit'
 import { Route as AuthedProxiesRouteImport } from './routes/_authed/proxies'
 import { Route as AuthedSettingsRouteImport } from './routes/_authed/settings'
+import { Route as AuthedAccountsIndexRouteImport } from './routes/_authed/accounts/index'
+import { Route as AuthedAccountsIdRouteImport } from './routes/_authed/accounts/$id'
 
 const AuthedRoute = AuthedRouteImport.update({
   id: '/_authed',
@@ -30,11 +31,6 @@ const LoginRoute = LoginRouteImport.update({
 const AuthedIndexRoute = AuthedIndexRouteImport.update({
   id: '/',
   path: '/',
-  getParentRoute: () => AuthedRoute,
-} as any)
-const AuthedAccountsRoute = AuthedAccountsRouteImport.update({
-  id: '/accounts',
-  path: '/accounts',
   getParentRoute: () => AuthedRoute,
 } as any)
 const AuthedAdminsRoute = AuthedAdminsRouteImport.update({
@@ -57,65 +53,81 @@ const AuthedSettingsRoute = AuthedSettingsRouteImport.update({
   path: '/settings',
   getParentRoute: () => AuthedRoute,
 } as any)
+const AuthedAccountsIndexRoute = AuthedAccountsIndexRouteImport.update({
+  id: '/accounts/',
+  path: '/accounts/',
+  getParentRoute: () => AuthedRoute,
+} as any)
+const AuthedAccountsIdRoute = AuthedAccountsIdRouteImport.update({
+  id: '/accounts/$id',
+  path: '/accounts/$id',
+  getParentRoute: () => AuthedRoute,
+} as any)
 
 export interface FileRoutesByFullPath {
   '/': typeof AuthedIndexRoute
   '/login': typeof LoginRoute
-  '/accounts': typeof AuthedAccountsRoute
   '/admins': typeof AuthedAdminsRoute
   '/audit': typeof AuthedAuditRoute
   '/proxies': typeof AuthedProxiesRoute
   '/settings': typeof AuthedSettingsRoute
+  '/accounts/$id': typeof AuthedAccountsIdRoute
+  '/accounts/': typeof AuthedAccountsIndexRoute
 }
 export interface FileRoutesByTo {
   '/login': typeof LoginRoute
-  '/accounts': typeof AuthedAccountsRoute
   '/admins': typeof AuthedAdminsRoute
   '/audit': typeof AuthedAuditRoute
   '/proxies': typeof AuthedProxiesRoute
   '/settings': typeof AuthedSettingsRoute
   '/': typeof AuthedIndexRoute
+  '/accounts/$id': typeof AuthedAccountsIdRoute
+  '/accounts': typeof AuthedAccountsIndexRoute
 }
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
   '/_authed': typeof AuthedRouteWithChildren
   '/login': typeof LoginRoute
-  '/_authed/accounts': typeof AuthedAccountsRoute
   '/_authed/admins': typeof AuthedAdminsRoute
   '/_authed/audit': typeof AuthedAuditRoute
   '/_authed/proxies': typeof AuthedProxiesRoute
   '/_authed/settings': typeof AuthedSettingsRoute
   '/_authed/': typeof AuthedIndexRoute
+  '/_authed/accounts/$id': typeof AuthedAccountsIdRoute
+  '/_authed/accounts/': typeof AuthedAccountsIndexRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
   fullPaths:
     | '/'
     | '/login'
-    | '/accounts'
     | '/admins'
     | '/audit'
     | '/proxies'
     | '/settings'
+    | '/accounts/$id'
+    | '/accounts/'
   fileRoutesByTo: FileRoutesByTo
   to:
     | '/login'
-    | '/accounts'
     | '/admins'
     | '/audit'
     | '/proxies'
     | '/settings'
     | '/'
+    | '/accounts/$id'
+    | '/accounts'
   id:
     | '__root__'
     | '/_authed'
     | '/login'
-    | '/_authed/accounts'
     | '/_authed/admins'
     | '/_authed/audit'
     | '/_authed/proxies'
     | '/_authed/settings'
     | '/_authed/'
+    | '/_authed/accounts/$id'
+    | '/_authed/accounts/'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
@@ -146,13 +158,6 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AuthedIndexRouteImport
       parentRoute: typeof AuthedRoute
     }
-    '/_authed/accounts': {
-      id: '/_authed/accounts'
-      path: '/accounts'
-      fullPath: '/accounts'
-      preLoaderRoute: typeof AuthedAccountsRouteImport
-      parentRoute: typeof AuthedRoute
-    }
     '/_authed/admins': {
       id: '/_authed/admins'
       path: '/admins'
@@ -181,25 +186,41 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AuthedSettingsRouteImport
       parentRoute: typeof AuthedRoute
     }
+    '/_authed/accounts/': {
+      id: '/_authed/accounts/'
+      path: '/accounts'
+      fullPath: '/accounts/'
+      preLoaderRoute: typeof AuthedAccountsIndexRouteImport
+      parentRoute: typeof AuthedRoute
+    }
+    '/_authed/accounts/$id': {
+      id: '/_authed/accounts/$id'
+      path: '/accounts/$id'
+      fullPath: '/accounts/$id'
+      preLoaderRoute: typeof AuthedAccountsIdRouteImport
+      parentRoute: typeof AuthedRoute
+    }
   }
 }
 
 interface AuthedRouteChildren {
-  AuthedAccountsRoute: typeof AuthedAccountsRoute
   AuthedAdminsRoute: typeof AuthedAdminsRoute
   AuthedAuditRoute: typeof AuthedAuditRoute
   AuthedProxiesRoute: typeof AuthedProxiesRoute
   AuthedSettingsRoute: typeof AuthedSettingsRoute
   AuthedIndexRoute: typeof AuthedIndexRoute
+  AuthedAccountsIdRoute: typeof AuthedAccountsIdRoute
+  AuthedAccountsIndexRoute: typeof AuthedAccountsIndexRoute
 }
 
 const AuthedRouteChildren: AuthedRouteChildren = {
-  AuthedAccountsRoute: AuthedAccountsRoute,
   AuthedAdminsRoute: AuthedAdminsRoute,
   AuthedAuditRoute: AuthedAuditRoute,
   AuthedProxiesRoute: AuthedProxiesRoute,
   AuthedSettingsRoute: AuthedSettingsRoute,
   AuthedIndexRoute: AuthedIndexRoute,
+  AuthedAccountsIdRoute: AuthedAccountsIdRoute,
+  AuthedAccountsIndexRoute: AuthedAccountsIndexRoute,
 }
 
 const AuthedRouteWithChildren =
