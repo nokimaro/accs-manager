@@ -13,6 +13,7 @@ import { originGuard } from './middleware/origin.ts'
 import { adminRoutes } from './routes/admins.ts'
 import { auditRoutes } from './routes/audit.ts'
 import { authRoutes } from './routes/auth.ts'
+import { codeRoutes } from './routes/codes.ts'
 import { eventRoutes } from './routes/events.ts'
 import { healthRoutes } from './routes/health.ts'
 import { importRoutes } from './routes/imports.ts'
@@ -66,6 +67,7 @@ export function createApp(deps: AppDeps): Hono<AppEnv> {
   api.route('/', settingsRoutes)
   api.route('/', proxyRoutes)
   api.route('/', importRoutes)
+  api.route('/', codeRoutes)
   api.route('/', auditRoutes)
   api.route('/', eventRoutes)
   api.all('*', (c) => c.json({ error: 'not_found' }, 404))

@@ -8,6 +8,8 @@ import { createMtcuteProxyChecker } from './proxies/checker.ts'
 import { createProxyHealth } from './proxies/health.ts'
 import { syncProxyStore } from './proxies/proxy-store.ts'
 import { createAccountManager, type SessionFactory } from './accounts/manager.ts'
+import { createCodeCollector } from './codes/collector.ts'
+import { housekeeping } from './housekeeping.ts'
 import { createMtcuteSession } from './telegram/mtcute-session.ts'
 import { createAccountStorage, prepareMtcuteStorage } from './telegram/storage.ts'
 import { createWorkerRuntime } from './runtime.ts'
@@ -53,7 +55,8 @@ const sessionFactory: SessionFactory = (account, ctx) => {
     importSession: ctx.importSession,
   })
 }
-const accountManager = createAccountManager(deps, sessionFactory)
+const codeCollector = createCodeCollector(deps)
+const accountManager = createAccountManager(deps, sessionFactory, { onSessionStarted: codeCollector.attach })
 
 const proxyChecker = createMtcuteProxyChecker(() => ({ apiId: settings.get('telegram.desktop.apiId'), apiHash: settings.get('telegram.desktop.apiHash') }))
 const proxyHealth = createProxyHealth(deps, proxyChecker, { onDown: accountManager.onProxyDown, onUp: accountManager.onProxyUp })
@@ -76,6 +79,9 @@ const runtime = createWorkerRuntime(deps, {
       await syncProxyStore(deps, fetch, proxyStoreHooks)
     },
     'accounts.refreshProfiles': async () => accountManager.refreshProfiles(),
+    housekeeping: async () => {
+      logger.info(await housekeeping(deps), 'worker: housekeeping done')
+    },
   },
 })
 await runtime.start()
