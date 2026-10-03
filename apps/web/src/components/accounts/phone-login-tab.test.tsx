@@ -102,6 +102,40 @@ describe('PhoneLoginTab', () => {
     expect(screen.getByText('Telegram не отправил код повторно — введите код, который уже пришёл')).toBeInTheDocument()
   })
 
+  it('shows what went wrong on every step: a mistyped number, a refused code, a failed password', async () => {
+    let startCalls = 0
+    fetchMock.mockImplementation(async (url: string) => {
+      if (url === '/api/proxies') return json({ items: [proxyFixture()] })
+      if (url === '/api/phone-login') {
+        startCalls++
+        return startCalls === 1
+          ? json({ error: 'validation', fields: { phone: 'Номер — от 7 до 15 цифр, например +7 700 123 45 67' } }, 400)
+          : json({ loginId: LOGIN_ID }, 201)
+      }
+      if (url.endsWith('/code')) return json({ error: 'validation', fields: { code: 'Код — только цифры' } }, 400)
+      if (url.endsWith('/password')) return json({ error: 'telegram_error', message: 'Воркер не отвечает' }, 503)
+      return new Response(null, { status: 202 })
+    })
+    const user = userEvent.setup()
+    renderWithClient(<PhoneLoginTab onDone={vi.fn()} />)
+    await waitFor(() => expect(screen.getByLabelText('Подключение')).toHaveTextContent('194.53.188.10'))
+    await user.type(screen.getByLabelText('Номер телефона'), '12')
+    await user.click(screen.getByRole('button', { name: 'Получить код' }))
+    expect(await screen.findByText('Номер — от 7 до 15 цифр, например +7 700 123 45 67')).toBeInTheDocument()
+    expect(screen.queryByText('HTTP 400')).not.toBeInTheDocument()
+
+    await user.click(screen.getByRole('button', { name: 'Получить код' }))
+    await phone(codeSent)
+    await user.type(await screen.findByLabelText('Код'), 'abc12')
+    await user.click(screen.getByRole('button', { name: 'Войти' }))
+    expect(await screen.findByText('Код — только цифры')).toBeInTheDocument()
+
+    await phone({ state: 'password_needed' })
+    await user.type(screen.getByLabelText('Облачный пароль'), 'pw')
+    await user.click(screen.getByRole('button', { name: 'Войти' }))
+    expect(await screen.findByText('Воркер не отвечает')).toBeInTheDocument()
+  })
+
   it('keeps an event that arrives before POST /phone-login answers', async () => {
     let answer!: () => void
     fetchMock.mockImplementation(async (url: string) => {

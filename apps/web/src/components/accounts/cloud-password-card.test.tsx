@@ -167,6 +167,40 @@ describe('CloudPasswordCard', () => {
     await waitFor(() => expect(calls(`POST ${base}/email`)).toEqual([{ action: 'cancel' }]))
   })
 
+  it('shows validation and refusal messages in words, also when the form did not ask for the current password', async () => {
+    const state = { info: info() }
+    api(state, {
+      [`PUT ${base}`]: () => {
+        // Telegram has a password the card did not know about yet
+        state.info = info({ hasPassword: true })
+        return json({ error: 'password_unknown', message: 'Панель не знает текущий пароль — введите его' }, 409)
+      },
+      [`POST ${base}/email`]: () => json({ error: 'validation', fields: { code: 'Код — только цифры' } }, 400),
+    })
+    const user = userEvent.setup()
+    renderWithClient(<CloudPasswordCard account={account} />)
+    await user.click(await screen.findByRole('button', { name: 'Установить пароль' }))
+    const dialog = screen.getByRole('dialog', { name: 'Новый облачный пароль' })
+    await user.type(within(dialog).getByLabelText('Новый пароль'), 'p')
+    await user.type(within(dialog).getByLabelText('Повтор пароля'), 'p')
+    await user.click(within(dialog).getByRole('button', { name: 'Сохранить' }))
+    expect(await within(dialog).findByText('Панель не знает текущий пароль — введите его')).toBeInTheDocument()
+    // the card re-read the state: the form now asks for the current password
+    expect(await within(dialog).findByLabelText('Текущий пароль')).toBeInTheDocument()
+  })
+
+  it('shows the email code check in words', async () => {
+    api({ info: info({ hasPassword: true, known: true, unconfirmedEmailPattern: 'm***@example.com' }) }, { [`POST ${base}/email`]: () => json({ error: 'validation', fields: { code: 'Код — только цифры' } }, 400) })
+    const user = userEvent.setup()
+    renderWithClient(<CloudPasswordCard account={account} />)
+    await user.click(await screen.findByRole('button', { name: 'Ввести код из письма' }))
+    const dialog = screen.getByRole('dialog', { name: 'Код из письма' })
+    await user.type(within(dialog).getByLabelText('Код'), '1')
+    await user.click(within(dialog).getByRole('button', { name: 'Подтвердить' }))
+    expect(await within(dialog).findByText('Код — только цифры')).toBeInTheDocument()
+    expect(within(dialog).queryByText('HTTP 400')).not.toBeInTheDocument()
+  })
+
   it('does not ask Telegram while the account is not connected', () => {
     const { fetchMock } = api({ info: info() })
     renderWithClient(<CloudPasswordCard account={accountFixture({ status: 'paused' })} />)

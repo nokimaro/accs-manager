@@ -9,10 +9,10 @@ import { Input } from '@workspace/ui/components/input'
 import { Spinner } from '@workspace/ui/components/spinner'
 import { toast } from '@workspace/ui/components/toast'
 import { PasswordInput } from '@/components/password-input'
-import { api, ApiError } from '@/lib/api'
+import { api, ApiError, errorText } from '@/lib/api'
 
 const errorCode = (err: unknown) => (err instanceof ApiError ? (err.body?.error ?? null) : null)
-const errorText = (err: unknown) => (err instanceof Error ? err.message : String(err))
+const fieldError = (err: unknown, field: string) => (err instanceof ApiError ? err.fields[field] : undefined)
 
 interface DialogProps {
   accountId: string
@@ -57,7 +57,7 @@ export function VerifyPasswordDialog({ accountId, open, onOpenChange, onChanged 
           <Field data-invalid={verify.error ? true : undefined}>
             <FieldLabel htmlFor="cloud-verify">Пароль</FieldLabel>
             <PasswordInput id="cloud-verify" autoComplete="off" required value={password} onChange={(e) => setPassword(e.target.value)} aria-invalid={verify.error ? true : undefined} />
-            {verify.error && <FieldError>{errorText(verify.error)}</FieldError>}
+            {verify.error && <FieldError>{errorText(verify.error, 'password')}</FieldError>}
           </Field>
           <DialogFooter>
             <Button type="submit" disabled={!password || verify.isPending}>
@@ -96,8 +96,12 @@ export function SetPasswordDialog({ accountId, info, open, onOpenChange, onChang
       if ('emailCodeNeeded' in result) onEmailCode(result.emailCodeNeeded)
       else toast.add({ title: 'Облачный пароль сохранён' })
     },
-    // a stored password that stopped fitting was forgotten: the form will ask for the current one
-    onError: (err) => errorCode(err) === 'stale_password' && onChanged(),
+    // the card's state was behind (a stored password stopped fitting, or Telegram has one the card did not know):
+    // re-read it, and the form asks for the current password
+    onError: (err) => {
+      const code = errorCode(err)
+      if (code === 'stale_password' || code === 'password_unknown') onChanged()
+    },
   })
   const close = (next: boolean) => {
     if (!next) {
@@ -109,9 +113,14 @@ export function SetPasswordDialog({ accountId, info, open, onOpenChange, onChang
   }
 
   const code = errorCode(save.error)
-  const currentError = code === 'wrong_password' || code === 'stale_password' || code === 'password_unknown' ? errorText(save.error) : null
-  const emailError = code === 'email_invalid' ? errorText(save.error) : null
-  const otherError = save.error && !currentError && !emailError ? errorText(save.error) : null
+  const currentError =
+    fieldError(save.error, 'currentPassword') ?? (code === 'wrong_password' || code === 'stale_password' || code === 'password_unknown' ? errorText(save.error) : null)
+  const newError = fieldError(save.error, 'newPassword') ?? null
+  const hintError = fieldError(save.error, 'hint') ?? null
+  const emailError = fieldError(save.error, 'email') ?? (code === 'email_invalid' ? errorText(save.error) : null)
+  // an error for a field the form does not show (current password not asked) goes to the general message
+  const shown = (askCurrent && currentError) || newError || hintError || emailError
+  const otherError = save.error && !shown ? errorText(save.error) : null
 
   return (
     <Dialog open={open} onOpenChange={close}>
@@ -140,19 +149,21 @@ export function SetPasswordDialog({ accountId, info, open, onOpenChange, onChang
                 {currentError && <FieldError>{currentError}</FieldError>}
               </Field>
             )}
-            <Field>
+            <Field data-invalid={newError ? true : undefined}>
               <FieldLabel htmlFor="cloud-new">Новый пароль</FieldLabel>
-              <PasswordInput id="cloud-new" autoComplete="new-password" required value={form.next} onChange={set('next')} />
+              <PasswordInput id="cloud-new" autoComplete="new-password" required value={form.next} onChange={set('next')} aria-invalid={newError ? true : undefined} />
+              {newError && <FieldError>{newError}</FieldError>}
             </Field>
             <Field data-invalid={mismatch ? true : undefined}>
               <FieldLabel htmlFor="cloud-repeat">Повтор пароля</FieldLabel>
               <PasswordInput id="cloud-repeat" autoComplete="new-password" required value={form.repeat} onChange={set('repeat')} aria-invalid={mismatch ? true : undefined} />
               {mismatch && <FieldError>Пароли не совпадают</FieldError>}
             </Field>
-            <Field>
+            <Field data-invalid={hintError ? true : undefined}>
               <FieldLabel htmlFor="cloud-hint">Подсказка</FieldLabel>
-              <Input id="cloud-hint" maxLength={128} value={form.hint} onChange={set('hint')} />
+              <Input id="cloud-hint" maxLength={128} value={form.hint} onChange={set('hint')} aria-invalid={hintError ? true : undefined} />
               <FieldDescription>Необязательно. Telegram покажет её при вводе пароля.</FieldDescription>
+              {hintError && <FieldError>{hintError}</FieldError>}
             </Field>
             <Field data-invalid={emailError ? true : undefined}>
               <FieldLabel htmlFor="cloud-email">Почта для восстановления</FieldLabel>
@@ -222,7 +233,7 @@ export function EmailCodeDialog({ accountId, step, open, onOpenChange, onChanged
             <FieldLabel htmlFor="cloud-email-code">Код</FieldLabel>
             <Input id="cloud-email-code" inputMode="numeric" autoComplete="one-time-code" value={code} onChange={(e) => setCode(e.target.value)} aria-invalid={act.error ? true : undefined} />
             {step?.length ? <FieldDescription>Код из {step.length} цифр</FieldDescription> : null}
-            {act.error && <FieldError>{errorText(act.error)}</FieldError>}
+            {act.error && <FieldError>{errorText(act.error, 'code')}</FieldError>}
           </Field>
           <DialogFooter>
             <Button type="button" variant="ghost" disabled={act.isPending} onClick={() => act.mutate('cancel')}>

@@ -10,7 +10,7 @@ import { Spinner } from '@workspace/ui/components/spinner'
 import { toast } from '@workspace/ui/components/toast'
 import { PasswordInput } from '@/components/password-input'
 import { accountsQueryOptions, freeProxies } from '@/lib/accounts'
-import { api } from '@/lib/api'
+import { api, ApiError, errorText } from '@/lib/api'
 import { useAppEvent } from '@/lib/app-events'
 import { proxiesQueryOptions } from '@/lib/proxies'
 import { RouteSelect } from './route-select'
@@ -158,6 +158,7 @@ export function PhoneLoginTab({ onDone }: { onDone: () => void }) {
   }
 
   if (!loginId || !progress) {
+    const phoneError = start.error instanceof ApiError ? start.error.fields.phone : undefined
     return (
       <form
         className="flex flex-col gap-6"
@@ -178,17 +179,27 @@ export function PhoneLoginTab({ onDone }: { onDone: () => void }) {
               placeholder="Свободных прокси нет — выберите вариант"
             />
           </Field>
-          <Field>
+          <Field data-invalid={phoneError ? true : undefined}>
             <FieldLabel htmlFor="phone-number">Номер телефона</FieldLabel>
-            <Input id="phone-number" type="tel" inputMode="tel" autoComplete="off" placeholder="+7 700 123 45 67" value={phone} onChange={(e) => setPhone(e.target.value)} />
+            <Input
+              id="phone-number"
+              type="tel"
+              inputMode="tel"
+              autoComplete="off"
+              placeholder="+7 700 123 45 67"
+              value={phone}
+              onChange={(e) => setPhone(e.target.value)}
+              aria-invalid={phoneError ? true : undefined}
+            />
             <FieldDescription>
               Код придёт в открытые приложения Telegram этого аккаунта — подойдёт и Telegram Desktop. Нужен свой api_id (Настройки → Telegram).
             </FieldDescription>
+            {phoneError && <FieldError>{phoneError}</FieldError>}
           </Field>
         </FieldGroup>
-        {start.error && (
+        {start.error && !phoneError && (
           <Alert variant="destructive">
-            <AlertDescription>{start.error.message}</AlertDescription>
+            <AlertDescription>{errorText(start.error)}</AlertDescription>
           </Alert>
         )}
         <div className="flex justify-end">
@@ -229,7 +240,8 @@ export function PhoneLoginTab({ onDone }: { onDone: () => void }) {
           <FieldLabel htmlFor="phone-password">Облачный пароль</FieldLabel>
           <PasswordInput id="phone-password" autoFocus autoComplete="off" required value={password} onChange={(e) => setPassword(e.target.value)} aria-invalid={invalid ? true : undefined} />
           {progress.hint && <FieldDescription>Подсказка: {progress.hint}</FieldDescription>}
-          {invalid && <FieldError>Неверный пароль — попробуйте ещё раз</FieldError>}
+          {invalid && !sendPassword.error && <FieldError>Неверный пароль — попробуйте ещё раз</FieldError>}
+          {sendPassword.error && <FieldError>{errorText(sendPassword.error, 'password')}</FieldError>}
         </Field>
         <div className="flex justify-end">
           <Button type="submit" disabled={!password || sendPassword.isPending}>
@@ -252,7 +264,13 @@ export function PhoneLoginTab({ onDone }: { onDone: () => void }) {
   // the code: code_sent, code_invalid, code_expired
   const where = delivery?.deliveryType ? (DELIVERY[delivery.deliveryType] ?? delivery.deliveryType) : null
   const nextType = delivery?.nextType ?? 'none'
-  const error = progress.state === 'code_invalid' ? 'Неверный код' : progress.state === 'code_expired' ? 'Код истёк — запросите новый' : null
+  const error = sendCode.error
+    ? errorText(sendCode.error, 'code')
+    : progress.state === 'code_invalid'
+      ? 'Неверный код'
+      : progress.state === 'code_expired'
+        ? 'Код истёк — запросите новый'
+        : null
   return (
     <form
       className="flex flex-col gap-6"
@@ -263,6 +281,7 @@ export function PhoneLoginTab({ onDone }: { onDone: () => void }) {
     >
       {where && <p className="text-sm">Код отправлен {where}</p>}
       {progress.message && <p className="text-muted-foreground text-sm">{progress.message}</p>}
+      {resend.error && <p className="text-destructive text-sm">{errorText(resend.error)}</p>}
       <Field data-invalid={error ? true : undefined}>
         <FieldLabel htmlFor="phone-code">Код</FieldLabel>
         <Input
