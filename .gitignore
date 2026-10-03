@@ -10,8 +10,23 @@ tdata-samples/
 # deps & build
 node_modules/
 dist/
+dist-ssr/
 *.tsbuildinfo
 coverage/
+.turbo/
+*.local
+
+# logs
+logs/
+*.log
+
+# test artifacts
+playwright-report/
+test-results/
+.vitest/
 
 # os / editor
 .DS_Store
+.idea/
+.vscode/*
+!.vscode/extensions.json

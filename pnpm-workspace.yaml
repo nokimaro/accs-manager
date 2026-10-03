@@ -1,0 +1,12 @@
+packages:
+  - "apps/*"
+  - "packages/*"
+
+# pnpm 12 fails CI installs on unreviewed build scripts: allow or deny each explicitly
+allowBuilds:
+  esbuild: true
+  msw: false
+  # optional native deps of testcontainers (docker-modem → ssh2); not needed
+  cpu-features: false
+  ssh2: false
+  protobufjs: false
