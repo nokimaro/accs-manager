@@ -8,6 +8,11 @@ export interface EventBus {
   publish(event: AppEvent): Promise<void>
   /** Returns an unsubscribe function. */
   subscribe(handler: EventHandler): () => void
+  /**
+   * Called each time the subscriber connection is ready again after a drop (not on the first connect).
+   * Messages published during the gap are lost, so state derived from events must be re-read.
+   */
+  onReconnect(handler: () => void): () => void
   close(): Promise<void>
 }
 
@@ -50,8 +55,22 @@ export async function createEventBus(options: {
     }
   }
 
+  const reconnectHandlers = new Set<() => void>()
+  const onReady = () => {
+    for (const handler of reconnectHandlers) {
+      try {
+        handler()
+      } catch (err) {
+        options.logger?.error({ err }, 'bus: reconnect handler failed')
+      }
+    }
+  }
+
   options.subscriber.on('message', onMessage)
   await options.subscriber.subscribe(channel)
+  // registered once the first SUBSCRIBE has completed, so every later 'ready' is a reconnect
+  // (ioredis re-subscribes the channel by itself before emitting it)
+  options.subscriber.on('ready', onReady)
 
   return {
     async publish(event) {
@@ -63,9 +82,17 @@ export async function createEventBus(options: {
         handlers.delete(handler)
       }
     },
+    onReconnect(handler) {
+      reconnectHandlers.add(handler)
+      return () => {
+        reconnectHandlers.delete(handler)
+      }
+    },
     async close() {
       handlers.clear()
+      reconnectHandlers.clear()
       options.subscriber.off('message', onMessage)
+      options.subscriber.off('ready', onReady)
       await options.subscriber.unsubscribe(channel)
     },
   }

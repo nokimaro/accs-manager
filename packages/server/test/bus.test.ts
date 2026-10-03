@@ -1,4 +1,5 @@
 import { randomUUID } from 'node:crypto'
+import { once } from 'node:events'
 // typed inject('redisUrl'): the ProvidedContext augmentation lives in the test-db helper
 import type {} from '@workspace/db/testing'
 import { afterAll, describe, expect, inject, it, vi } from 'vitest'
@@ -47,6 +48,30 @@ describe('event bus', () => {
     await bus.publish({ type: 'settings.changed', keys: ['b'], by: null })
     await new Promise((resolve) => setTimeout(resolve, 200))
     expect(good).toHaveBeenCalledTimes(1)
+    await bus.close()
+  })
+
+  it('calls onReconnect handlers after the subscriber reconnects (not on the first connect) and stays subscribed', async () => {
+    const channel = `test:${randomUUID()}`
+    const pub = createRedis(url, 'r-pub')
+    const sub = createRedis(url, 'r-sub')
+    conns.push(pub, sub)
+    const bus = await createEventBus({ publisher: pub, subscriber: sub, channel })
+    const reconnected = vi.fn()
+    const off = bus.onReconnect(reconnected)
+    expect(reconnected).not.toHaveBeenCalled()
+
+    sub.disconnect(true)
+    await vi.waitFor(() => expect(reconnected).toHaveBeenCalledOnce())
+    const received = vi.fn()
+    bus.subscribe(received)
+    await bus.publish({ type: 'settings.changed', keys: ['a'], by: null })
+    await vi.waitFor(() => expect(received).toHaveBeenCalledOnce())
+
+    off()
+    sub.disconnect(true)
+    await once(sub, 'ready')
+    expect(reconnected).toHaveBeenCalledOnce()
     await bus.close()
   })
 })

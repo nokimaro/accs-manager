@@ -58,11 +58,17 @@ export class SettingsService {
 
   static async create(options: { db: Db; cipher: Cipher; bus: EventBus; logger?: Logger }): Promise<SettingsService> {
     const service = new SettingsService(options.db, options.cipher, options.bus, options.logger)
+    const reload = () => service.reload().catch((err: unknown) => service.#logger?.error({ err }, 'settings: reload failed'))
     // subscribe before the first load so a change published in between is not lost
-    service.#unsubscribe = options.bus.subscribe((event) => {
-      if (event.type !== 'settings.changed') return
-      service.reload().catch((err: unknown) => service.#logger?.error({ err }, 'settings: reload failed'))
+    const offChanged = options.bus.subscribe((event) => {
+      if (event.type === 'settings.changed') void reload()
     })
+    // a change broadcast while Redis was unreachable never arrives: re-read everything after a reconnect
+    const offReconnect = options.bus.onReconnect(() => void reload())
+    service.#unsubscribe = () => {
+      offChanged()
+      offReconnect()
+    }
     await service.reload()
     return service
   }

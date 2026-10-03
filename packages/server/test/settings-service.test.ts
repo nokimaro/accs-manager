@@ -108,11 +108,24 @@ describe('SettingsService', () => {
         throw new Error('redis down')
       },
       subscribe: () => () => undefined,
+      onReconnect: () => () => undefined,
       close: async () => undefined,
     }
     const s = await SettingsService.create({ db: t.db, cipher, bus: failingBus })
     const r = await s.update({ 'proxy.failThreshold': 6 }, { adminId: null })
     expect(r.ok).toBe(true)
     expect(s.get('proxy.failThreshold')).toBe(6)
+  })
+
+  it('re-reads everything after the bus reconnects: a change broadcast in the gap is not lost', async () => {
+    const pub = createRedis(inject('redisUrl'), 'pub')
+    const sub = createRedis(inject('redisUrl'), 'sub')
+    redis.push(pub, sub)
+    const s = await SettingsService.create({ db: t.db, cipher, bus: await createEventBus({ publisher: pub, subscriber: sub, channel }) })
+    // written by another process (CLI, worker) while this subscriber is offline: its broadcast never arrives
+    await t.db.insert(settingsTable).values({ key: 'proxy.failThreshold', value: 8 })
+    sub.disconnect(true)
+    await vi.waitFor(() => expect(s.get('proxy.failThreshold')).toBe(8), { timeout: 5_000 })
+    s.close()
   })
 })
