@@ -47,7 +47,7 @@ apps/api        Hono API + CLI (src/main.ts, src/app.ts, src/cli.ts; routes/, mi
 apps/worker     воркер: lock.ts (advisory lock), runtime.ts + schedule.ts (BullMQ: команды и периодические задачи),
                 proxies/ (проверки, proxy-store), telegram/ (сессия mtcute, хранилище, классификация ошибок),
                 accounts/manager.ts (жизненный цикл клиентов), codes/ (сбор из @VerificationCodes), notify/ (бот),
-                qr/ (вход по QR), housekeeping.ts
+                qr/ (вход по QR), login/ (вход по номеру и общее для входов), housekeeping.ts
 apps/web        SPA (routes/ — TanStack file routes, components/, lib/{api,auth,router,query-client,use-event-stream,…})
 packages/shared без IO, импортируется и вебом: env, duration, crypto (AES-256-GCM), api DTO, events,
                 settings/ (реестр настроек: types, helpers, groups, definitions, units, format, validate)
@@ -129,6 +129,10 @@ CLI (`apps/api/src/cli.ts`): `admin:create|admin:reset-password|admin:disable --
   `drizzle-orm`: опциональный peer `better-sqlite3` у `@mtcute/node` порождает вторую копию drizzle с
   несовместимыми типами. В `pnpm-workspace.yaml` сборки `better-sqlite3` и `msgpackr-extract` запрещены
   (`allowBuilds: false`).
+- Если `drizzle-kit generate` пишет «Please install latest version of drizzle-orm»: он импортирует
+  `drizzle-orm/version` через скрытый hoist `node_modules/.pnpm/node_modules/drizzle-orm`. Hoist мог достаться
+  варианту `drizzle-orm` с `better-sqlite3` — направьте ссылку на вариант `…_pg@…` и повторите. Это локальная
+  правка окружения, не коммит.
 
 ## Воркер и Telegram
 
@@ -157,8 +161,25 @@ CLI (`apps/api/src/cli.ts`): `admin:create|admin:reset-password|admin:disable --
 - Прокси: дешёвая проверка — TCP-туннель до DC2 через прокси каждые N минут; раз в сутки — MTProto
   `help.getNearestDc`, ради страны, которую видит Telegram (194.53.188.x — KZ, 194.53.189.x — JP; страна только
   показывается). Один прокси — один аккаунт (unique). «Напрямую» — только явным выбором админа.
-- Вход по QR требует своего api_id/api_hash (`telegram.own.*`); пароль 2FA идёт в воркер через Redis pub/sub
-  (`accs:qr:<id>`), не сохраняется и не пишется в аудит.
+- Вход по QR и по номеру требует своего api_id/api_hash (`telegram.own.*`). Секреты входа идут в воркер через
+  Redis pub/sub, не сохраняются и не пишутся в аудит:
+  - QR — пароль 2FA через `accs:qr:<id>`;
+  - номер — код, пароль, «отправить ещё раз», отмена через `accs:login:<id>`.
+
+  Оба входа завершаются в `login/common.ts`:
+  - аккаунт уже в панели — новая сессия выходит;
+  - иначе аккаунт сохраняется с session string и введённым облачным паролем;
+  - клиент входа уничтожается до старта аккаунта.
+
+  Telegram Desktop не умеет подтверждать QR-вход (`auth.acceptLoginToken` в tdesktop не вызывается), поэтому
+  для аккаунтов только с Desktop — вход по номеру: код приходит в Desktop от «Telegram».
+- Облачный пароль хранится в `accounts.cloud_password_enc`, зашифрованным.
+  - Пишет его только воркер и только после того, как Telegram пароль принял: вход, «Указать текущий», установка или смена.
+  - Команды `account.password.*` несут секреты только полями `…Enc`.
+  - Показать пароль — аудируемый `GET /accounts/:id/cloud-password`.
+  - Состояние 2FA (подсказка, почта восстановления, отложенный сброс) не хранится: `account.password.info` спрашивает Telegram при открытии карточки.
+  - Адрес почты восстановления Telegram отдаёт только при известном пароле (`account.getPasswordSettings`).
+  - Веб не перезапрашивает «живые» данные аккаунта на каждое событие (`ON_DEMAND_ACCOUNT_QUERIES`).
 - Логи воркера для эксплуатации: `accounts: connected`, `codes: watching @VerificationCodes` (`caughtUp`),
   `accounts: client error`. Телефоны и ключи в логи не пишутся.
 
@@ -220,6 +241,10 @@ CLI (`apps/api/src/cli.ts`): `admin:create|admin:reset-password|admin:disable --
   профиль, сессии, заморозка, коды из @VerificationCodes, уведомления в канал. Живая проверка на архиве из
   `tdata-samples/` через KZ-прокси: подключение, профиль и сессии подтверждены; приход настоящего кода в ленту и канал
   ещё не наблюдался (задача 19, шаг 4).
+- **План 3 «Вход по номеру и облачный пароль»** (`docs/superpowers/plans/2026-10-03-plan-3-phone-login-cloud-password.md`,
+  спека `docs/superpowers/specs/2026-10-03-phone-login-cloud-password-design.md`):
+  - вкладка «По номеру» с кодом и облачным паролем;
+  - в карточке аккаунта — облачный пароль: состояние, показ, «Указать текущий», установка и смена с почтой восстановления.
 - Планы пишутся перед реализацией (скилл writing-plans) от спеки `docs/superpowers/specs/2026-10-03-accs-manager-design.md`.
   Отложенные пункты из ревью плана 1 перечислены в итогах сессии (раздел «Что дальше»).
 

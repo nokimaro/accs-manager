@@ -45,3 +45,17 @@ test('QR login explains that it needs an own api_id', async ({ page, isMobile })
   await dialog.getByRole('button', { name: 'Показать QR-код' }).click()
   await expect(dialog.getByText('Для входа по QR нужен свой api_id и api_hash (Настройки → Telegram)')).toBeVisible()
 })
+
+test('login by phone explains that it needs an own api_id', async ({ page, isMobile }) => {
+  await signIn(page)
+  await goToSection(page, 'Аккаунты', isMobile)
+  await page.getByRole('button', { name: 'Добавить аккаунт' }).click()
+  const dialog = page.getByRole('dialog', { name: 'Новый аккаунт' })
+  await dialog.getByRole('tab', { name: 'По номеру' }).click()
+  await dialog.getByLabel('Подключение').click()
+  await page.getByRole('option', { name: 'Напрямую, без прокси' }).click()
+  await dialog.getByLabel('Номер телефона').fill('+7 700 123 45 67')
+  await dialog.getByRole('button', { name: 'Получить код' }).click()
+  await expect(dialog.getByText('Для входа по номеру нужен свой api_id и api_hash (Настройки → Telegram)')).toBeVisible()
+})
+

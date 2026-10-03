@@ -129,7 +129,7 @@ function AccountsPage() {
 
   return (
     <div className="flex flex-col gap-6">
-      <PageHeader title="Аккаунты" description="Telegram-аккаунты панели: перенесённые из tdata и вошедшие по QR." actions={<AddAccountDialog />} />
+      <PageHeader title="Аккаунты" description="Telegram-аккаунты панели: перенесённые из tdata и вошедшие новой сессией — по QR или по номеру." actions={<AddAccountDialog />} />
       <div className="flex flex-wrap items-end gap-4">
         <Field className="w-auto">
           <FieldLabel>Статус</FieldLabel>
