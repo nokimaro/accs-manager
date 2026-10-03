@@ -5,6 +5,14 @@
     <link rel="icon" href="data:," />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>accs-manager</title>
+    <script>
+      // apply the saved theme before the first paint (ThemeProvider takes over after React mounts)
+      try {
+        const theme = localStorage.getItem('theme')
+        const dark = theme === 'dark' || (theme !== 'light' && matchMedia('(prefers-color-scheme: dark)').matches)
+        document.documentElement.classList.add(dark ? 'dark' : 'light')
+      } catch {}
+    </script>
   </head>
   <body>
     <div id="root"></div>

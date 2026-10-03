@@ -12,6 +12,7 @@ import {
   DropdownMenuTrigger,
 } from '@workspace/ui/components/dropdown-menu'
 import { KeyIcon, LogOutIcon } from 'lucide-react'
+import { ThemeMenuGroup } from '@/components/theme-menu-group'
 import { api } from '@/lib/api'
 import { authKeys } from '@/lib/auth'
 
@@ -36,6 +37,8 @@ export function UserMenu({ login, onChangePassword }: { login: string; onChangeP
         <DropdownMenuGroup>
           <DropdownMenuLabel>{login}</DropdownMenuLabel>
         </DropdownMenuGroup>
+        <DropdownMenuSeparator />
+        <ThemeMenuGroup />
         <DropdownMenuSeparator />
         <DropdownMenuGroup>
           <DropdownMenuItem onClick={onChangePassword}>
