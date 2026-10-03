@@ -217,7 +217,8 @@ CLI (`apps/api/src/cli.ts`): `admin:create|admin:reset-password|admin:disable --
 - **План 2 «Воркер, прокси, Telegram»** (`docs/superpowers/plans/2026-10-03-plan-2-worker-proxies-telegram.md`) —
   воркер, пул прокси (ручной ввод, импорт, proxy-store `country=kz`, `category=for_all`), аккаунты из tdata и по QR,
   профиль, сессии, заморозка, коды из @VerificationCodes, уведомления в канал. Живая проверка на архиве из
-  `tdata-samples/` через KZ-прокси пройдена в песочнице.
+  `tdata-samples/` через KZ-прокси: подключение, профиль и сессии подтверждены; приход настоящего кода в ленту и канал
+  ещё не наблюдался (задача 19, шаг 4).
 - Планы пишутся перед реализацией (скилл writing-plans) от спеки `docs/superpowers/specs/2026-10-03-accs-manager-design.md`.
   Отложенные пункты из ревью плана 1 перечислены в итогах сессии (раздел «Что дальше»).
 
