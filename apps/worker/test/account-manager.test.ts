@@ -75,7 +75,7 @@ describe('account manager', () => {
 
     await w.t.db.update(proxies).set({ status: 'ok' }).where(eq(proxies.id, p.id))
     await manager.onProxyUp(p.id)
-    expect(await read(a.id)).toMatchObject({ status: 'active' })
+    await vi.waitFor(async () => expect(await read(a.id)).toMatchObject({ status: 'active' }))
 
     await manager.onProxyDown(p.id)
     expect(fake.last().stopped).toBe(true)
@@ -156,5 +156,83 @@ describe('account manager', () => {
     expect(await manager.stop(a.id, true)).toEqual({ stopped: false, loggedOut: false })
     expect(fake.last().loggedOut).toBe(true)
     expect(manager.isRunning(a.id)).toBe(false)
+  })
+
+  describe('lifecycle races', () => {
+    const hang = () => new Promise<never>(() => {})
+
+    it('pausing while it connects keeps the account paused and does not reconnect', async () => {
+      const a = await account()
+      const fake = fakeFactory((s) => (s.startResult = hang))
+      const manager = createAccountManager(w.deps, fake.factory, {}, { jitterMs: 0, retryDelaysMs: [20] })
+      const connecting = manager.sync(a.id)
+      await vi.waitFor(() => expect(fake.sessions).toHaveLength(1))
+
+      // what POST /accounts/:id/pause does: status first, then account.stop
+      await w.t.db.update(accounts).set({ status: 'paused' }).where(eq(accounts.id, a.id))
+      expect(await manager.stop(a.id)).toEqual({ stopped: true, loggedOut: false })
+      await connecting
+      await new Promise((r) => setTimeout(r, 80))
+      expect(await read(a.id)).toMatchObject({ status: 'paused' })
+      expect(fake.sessions).toHaveLength(1)
+      expect(manager.isRunning(a.id)).toBe(false)
+    })
+
+    it('gives a connect that never finishes up after a timeout and retries', async () => {
+      const a = await account()
+      let attempt = 0
+      const fake = fakeFactory((s) => {
+        const ok = s.startResult
+        s.startResult = () => (++attempt === 1 ? hang() : ok())
+      })
+      const manager = createAccountManager(w.deps, fake.factory, {}, { jitterMs: 0, retryDelaysMs: [20], connectTimeoutMs: 30 })
+      await manager.sync(a.id)
+      expect(await read(a.id)).toMatchObject({ status: 'error', statusReason: 'Telegram не ответил за 1 с — подключение прервано' })
+      expect(fake.sessions[0]!.stopped).toBe(true)
+      await vi.waitFor(async () => expect((await read(a.id)).status).toBe('active'))
+      await manager.stopAll()
+    })
+
+    it('ignores errors of a client that was already replaced', async () => {
+      const a = await account()
+      const fake = fakeFactory()
+      const manager = createAccountManager(w.deps, fake.factory, {}, { jitterMs: 0, retryDelaysMs: [20] })
+      await manager.sync(a.id)
+      const old = fake.last()
+      await manager.sync(a.id)
+      const current = fake.last()
+      expect(current).not.toBe(old)
+
+      old.emitError(new Error('socket closed'))
+      await new Promise((r) => setTimeout(r, 80))
+      expect(current.stopped).toBe(false)
+      expect(manager.isRunning(a.id)).toBe(true)
+      expect(fake.sessions).toHaveLength(2)
+      expect(await read(a.id)).toMatchObject({ status: 'active' })
+      await manager.stopAll()
+    })
+
+    it('keeps the client running when the Telegram logout fails', async () => {
+      const a = await account()
+      const fake = fakeFactory((s) => s.logOut.mockRejectedValue(new Error('timeout')))
+      const manager = createAccountManager(w.deps, fake.factory, {}, { jitterMs: 0 })
+      await manager.sync(a.id)
+      expect(await manager.stop(a.id, true)).toEqual({ stopped: false, loggedOut: false })
+      expect(manager.isRunning(a.id)).toBe(true)
+      expect(fake.last().stopped).toBe(false)
+      await manager.stopAll()
+    })
+
+    it('does not hold up the proxy check while the account connects', async () => {
+      const p = await proxy({ status: 'dead' })
+      const a = await account({ connectionMode: 'proxy', proxyId: p.id, status: 'proxy_down' })
+      const fake = fakeFactory((s) => (s.startResult = hang))
+      const manager = createAccountManager(w.deps, fake.factory, {}, { jitterMs: 0, connectTimeoutMs: 10_000 })
+      await w.t.db.update(proxies).set({ status: 'ok' }).where(eq(proxies.id, p.id))
+      const done = await Promise.race([manager.onProxyUp(p.id).then(() => 'returned'), new Promise((r) => setTimeout(() => r('blocked'), 300))])
+      expect(done).toBe('returned')
+      await vi.waitFor(() => expect(fake.sessions.map((s) => s.account.id)).toEqual([a.id]))
+      await manager.stopAll()
+    })
   })
 })

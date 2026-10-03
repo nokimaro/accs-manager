@@ -22,6 +22,8 @@ export interface AccountManagerOptions {
   retryDelaysMs?: number[]
   /** random spread between starts so dozens of clients do not connect in one burst */
   jitterMs?: number
+  /** a connect that has not finished by then is abandoned and retried (mtcute itself retries forever) */
+  connectTimeoutMs?: number
 }
 
 export interface AccountManager {
@@ -41,6 +43,9 @@ export interface AccountManager {
 }
 
 const DEFAULT_RETRY_DELAYS = [60_000, 120_000, 300_000, 600_000, 1_800_000]
+const DEFAULT_CONNECT_TIMEOUT = 90_000
+/** statuses in which the account must not run, whatever a client reports */
+const STOPPED_STATUSES: readonly AccountStatus[] = ['paused', 'unauthorized', 'banned']
 const FROZEN_REASON = 'Telegram ограничил аккаунт (заморозка): коды продолжают приходить'
 
 export class AccountNotRunningError extends Error {
@@ -54,6 +59,7 @@ export function createAccountManager(deps: WorkerDeps, factory: SessionFactory, 
   const { db, cipher, settings, logger, bus } = deps
   const retryDelays = options.retryDelaysMs ?? DEFAULT_RETRY_DELAYS
   const jitterMs = options.jitterMs ?? 1_500
+  const connectTimeoutMs = options.connectTimeoutMs ?? DEFAULT_CONNECT_TIMEOUT
   const running = new Map<string, TelegramSession>()
   const retries = new Map<string, { attempt: number; timer?: NodeJS.Timeout }>()
   let shuttingDown = false
@@ -100,13 +106,20 @@ export function createAccountManager(deps: WorkerDeps, factory: SessionFactory, 
     retries.delete(id)
   }
 
+  /** start() in the background: callers such as the proxy check must not wait for Telegram */
+  function launch(id: string): void {
+    start(id).catch((err: unknown) => logger.error({ err, accountId: id }, 'accounts: start crashed'))
+  }
+
   function scheduleRetry(id: string): void {
     if (shuttingDown) return
-    const attempt = (retries.get(id)?.attempt ?? 0) + 1
+    const previous = retries.get(id)
+    if (previous?.timer) clearTimeout(previous.timer)
+    const attempt = (previous?.attempt ?? 0) + 1
     const delay = retryDelays[Math.min(attempt - 1, retryDelays.length - 1)]!
     const timer = setTimeout(() => {
       retries.set(id, { attempt })
-      void start(id)
+      launch(id)
     }, delay)
     timer.unref()
     retries.set(id, { attempt, timer })
@@ -115,25 +128,29 @@ export function createAccountManager(deps: WorkerDeps, factory: SessionFactory, 
   async function stopSession(id: string, logout = false): Promise<{ stopped: boolean; loggedOut: boolean }> {
     const session = running.get(id)
     if (!session) return { stopped: false, loggedOut: false }
-    running.delete(id)
-    let loggedOut = false
     if (logout) {
-      loggedOut = await session
-        .logOut()
-        .then(() => true)
-        .catch((err: unknown) => {
-          logger.warn({ err, accountId: id }, 'accounts: log out failed')
-          return false
-        })
+      try {
+        await session.logOut()
+      } catch (err) {
+        // the caller keeps the account (409): so must we, or its codes would silently stop
+        logger.warn({ err, accountId: id }, 'accounts: log out failed')
+        return { stopped: false, loggedOut: false }
+      }
     }
+    running.delete(id)
     await session.stop().catch((err: unknown) => logger.warn({ err, accountId: id }, 'accounts: stop failed'))
-    return { stopped: true, loggedOut }
+    return { stopped: true, loggedOut: logout }
   }
 
   async function handleError(id: string, err: unknown): Promise<void> {
     const { kind, reason } = classifyTelegramError(err)
     const account = await load(id)
-    if (!account) return
+    if (!account || STOPPED_STATUSES.includes(account.status)) {
+      // deleted or paused meanwhile: only make sure no client is left
+      clearRetry(id)
+      await stopSession(id)
+      return
+    }
     logger.warn({ accountId: id, kind, reason }, 'accounts: client error')
     if (kind === 'unauthorized' || kind === 'banned') {
       clearRetry(id)
@@ -179,8 +196,13 @@ export function createAccountManager(deps: WorkerDeps, factory: SessionFactory, 
     }
     // claimed before the first await: a second start() of the same account is a no-op
     running.set(id, session)
+    let timer: NodeJS.Timeout | undefined
     try {
-      const profile = await session.start()
+      const timeout = new Promise<never>((_, reject) => {
+        timer = setTimeout(() => reject(new Error(`Telegram не ответил за ${Math.ceil(connectTimeoutMs / 1000)} с — подключение прервано`)), connectTimeoutMs)
+      })
+      const profile = await Promise.race([session.start(), timeout])
+      clearTimeout(timer)
       const freeze = await session.freezeInfo().catch(() => null)
       const [updated] = await db
         .update(accounts)
@@ -201,13 +223,20 @@ export function createAccountManager(deps: WorkerDeps, factory: SessionFactory, 
         .returning()
       account = updated ?? account
       clearRetry(id)
-      session.onError((err) => void handleError(id, err))
+      session.onError((err) => {
+        // a client that was stopped or replaced is not the account's problem any more
+        if (running.get(id) !== session) return
+        handleError(id, err).catch((e: unknown) => logger.error({ err: e, accountId: id }, 'accounts: error handling failed'))
+      })
       account = await setStatus(account, freeze?.since ? 'frozen' : 'active', freeze?.since ? FROZEN_REASON : null)
       logger.info({ accountId: id, dcId: account.dcId, proxyId: account.proxyId, status: account.status }, 'accounts: connected')
       await hooks.onSessionStarted?.(account, session)
     } catch (err) {
-      running.delete(id)
+      clearTimeout(timer)
       await session.stop().catch(() => {})
+      // stopped (pause, delete) or replaced (reconnect, new proxy) while connecting: the failure is expected
+      if (running.get(id) !== session) return
+      running.delete(id)
       await handleError(id, err)
     }
   }
@@ -254,13 +283,13 @@ export function createAccountManager(deps: WorkerDeps, factory: SessionFactory, 
       }
     },
     async onProxyUp(proxyId) {
-      for (const account of await accountsOnProxy(proxyId, ['proxy_down'])) await start(account.id)
+      for (const account of await accountsOnProxy(proxyId, ['proxy_down'])) launch(account.id)
     },
     async onProxyChanged(proxyId) {
       for (const account of await accountsOnProxy(proxyId)) {
         if (running.has(account.id)) {
           await stopSession(account.id)
-          await start(account.id)
+          launch(account.id)
         }
       }
     },
@@ -275,7 +304,7 @@ export function createAccountManager(deps: WorkerDeps, factory: SessionFactory, 
           const account = await load(id)
           if (account && freeze) await setStatus(account, freeze.since ? 'frozen' : 'active', freeze.since ? FROZEN_REASON : null)
         } catch (err) {
-          await handleError(id, err)
+          if (running.get(id) === session) await handleError(id, err)
         }
       }
     },

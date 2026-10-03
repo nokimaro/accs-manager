@@ -31,7 +31,15 @@ export class FakeSession implements TelegramSession {
     this.startResult = async () => full
   }
 
-  start = vi.fn(() => this.startResult())
+  /** like mtcute: destroying the client rejects a start() that is still connecting */
+  private rejectStart?: (err: unknown) => void
+  start = vi.fn(
+    () =>
+      new Promise<SessionProfile>((resolve, reject) => {
+        this.rejectStart = reject
+        this.startResult().then(resolve, reject)
+      }),
+  )
   profile = vi.fn(() => this.startResult())
   freezeInfo = vi.fn(async () => this.freeze)
   resolveUserId = vi.fn(async (username: string) => {
@@ -55,6 +63,7 @@ export class FakeSession implements TelegramSession {
   })
   stop = vi.fn(async () => {
     this.stopped = true
+    this.rejectStart?.(new Error('Session is reset'))
   })
 
   emitMessage(m: IncomingMessage) {
