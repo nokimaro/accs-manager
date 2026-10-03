@@ -79,6 +79,8 @@ export function PhoneLoginTab({ onDone }: { onDone: () => void }) {
   const [resendAt, setResendAt] = React.useState<number | null>(null)
   const [code, setCode] = React.useState('')
   const [password, setPassword] = React.useState('')
+  // a resend asked for and not answered yet: no second request from a double click
+  const [resendPending, setResendPending] = React.useState(false)
   // «напрямую» only by an explicit choice: with no free proxy the admin has to pick it
   const effectiveRoute = route ?? free[0]?.id ?? null
   // the worker may answer before POST /phone-login does: keep such events until the id is known
@@ -88,6 +90,7 @@ export function PhoneLoginTab({ onDone }: { onDone: () => void }) {
   const apply = (event: PhoneProgress) => {
     setProgress(event)
     if (event.deliveryType) {
+      setResendPending(false)
       setDelivery(event)
       if (event.state === 'code_sent') setResendAt(Date.now() + (event.retryAfterSec ?? 0) * 1000)
     }
@@ -110,7 +113,11 @@ export function PhoneLoginTab({ onDone }: { onDone: () => void }) {
     mutationFn: () => api(`/phone-login/${loginId}/password`, { method: 'POST', json: { password } }),
     onSuccess: () => setPassword(''),
   })
-  const resend = useMutation({ mutationFn: () => api(`/phone-login/${loginId}/resend`, { method: 'POST' }) })
+  const resend = useMutation({
+    mutationFn: () => api(`/phone-login/${loginId}/resend`, { method: 'POST' }),
+    onMutate: () => setResendPending(true),
+    onError: () => setResendPending(false),
+  })
 
   useAppEvent((event) => {
     if (event.type !== 'phone.update') return
@@ -255,6 +262,7 @@ export function PhoneLoginTab({ onDone }: { onDone: () => void }) {
       }}
     >
       {where && <p className="text-sm">Код отправлен {where}</p>}
+      {progress.message && <p className="text-muted-foreground text-sm">{progress.message}</p>}
       <Field data-invalid={error ? true : undefined}>
         <FieldLabel htmlFor="phone-code">Код</FieldLabel>
         <Input
@@ -271,11 +279,18 @@ export function PhoneLoginTab({ onDone }: { onDone: () => void }) {
         {error && <FieldError>{error}</FieldError>}
       </Field>
       <div className="flex flex-wrap justify-end gap-2">
-        {nextType !== 'none' && (
-          <Button type="button" variant="ghost" disabled={secondsLeft > 0 || resend.isPending} onClick={() => resend.mutate()}>
-            {RESEND[nextType] ?? 'Отправить ещё раз'}
-            {secondsLeft > 0 ? ` через ${secondsLeft} с` : ''}
+        {progress.state === 'code_expired' ? (
+          // an expired code cannot be resent: the worker asks Telegram for a fresh one
+          <Button type="button" variant="ghost" disabled={resendPending} onClick={() => resend.mutate()}>
+            Запросить новый код
           </Button>
+        ) : (
+          nextType !== 'none' && (
+            <Button type="button" variant="ghost" disabled={secondsLeft > 0 || resendPending} onClick={() => resend.mutate()}>
+              {RESEND[nextType] ?? 'Отправить ещё раз'}
+              {secondsLeft > 0 ? ` через ${secondsLeft} с` : ''}
+            </Button>
+          )
         )}
         <Button type="submit" disabled={!code.trim() || sendCode.isPending}>
           {sendCode.isPending && <Spinner data-icon="inline-start" />}

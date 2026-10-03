@@ -128,31 +128,64 @@ export function createPhoneLogin(deps: WorkerDeps, factory: PhoneClientFactory, 
 
         let profile: SessionProfile | undefined
         let cloudPassword: string | null = null
-        const first = await phoneClient.sendCode(phone, signal)
-        if (isProfile(first)) profile = first
-        else {
-          code = first
-          if (code.deliveryType === 'email_required') {
+        // «send again» works after Telegram's countdown; an expired code needs a fresh sendCode, not a resend
+        let resendAfter = 0
+        let codeExpired = false
+        const codeSent = async (sentCode: SentCodeInfo, extra: PhoneUpdate = {}) => {
+          code = sentCode
+          codeExpired = false
+          resendAfter = Date.now() + sentCode.timeoutSec * 1000
+          await update(loginId, 'code_sent', { ...codeInfo(sentCode), ...extra })
+        }
+        /** sendCode, the first time or after expiry: Telegram may also authorize at once */
+        const sendFresh = async (): Promise<SessionProfile | undefined> => {
+          const sentCode = await phoneClient.sendCode(phone, signal)
+          if (isProfile(sentCode)) return sentCode
+          if (sentCode.deliveryType === 'email_required') {
             throw new LoginRefused('Telegram требует привязать почту для входа — сделайте это в официальном приложении')
           }
-          await update(loginId, 'code_sent', codeInfo(code))
+          await codeSent(sentCode)
+          return undefined
         }
+
+        profile = await sendFresh()
 
         // the code
         let needsPassword = false
         while (!profile && !needsPassword) {
           const message = await next()
           if (message.type === 'resend') {
-            if (code!.nextType === 'none') continue
-            code = await phoneClient.resendCode(phone, code!.phoneCodeHash, signal)
-            await update(loginId, 'code_sent', codeInfo(code))
+            if (codeExpired) {
+              profile = await sendFresh()
+              continue
+            }
+            // a click before the countdown (or with nothing to resend by) does not reach Telegram
+            if (Date.now() < resendAfter || code!.nextType === 'none') continue
+            try {
+              await codeSent(await phoneClient.resendCode(phone, code!.phoneCodeHash, signal))
+            } catch (err) {
+              if (signal.aborted) throw err
+              if (tl.RpcError.is(err, 'PHONE_CODE_EXPIRED')) {
+                profile = await sendFresh()
+                continue
+              }
+              // the code already sent may still be on its way or in the app: keep the login going
+              await update(loginId, 'code_sent', {
+                ...codeInfo(code!),
+                retryAfterSec: 0,
+                nextType: 'none',
+                message: tl.RpcError.is(err, 'SEND_CODE_UNAVAILABLE') ? 'Telegram не отправил код повторно — введите код, который уже пришёл' : phoneLoginError(err),
+              })
+            }
           } else if (message.type === 'code') {
             try {
               profile = await phoneClient.signIn(phone, code!.phoneCodeHash, message.code, signal)
             } catch (err) {
               if (tl.RpcError.is(err, 'PHONE_CODE_INVALID')) await update(loginId, 'code_invalid', codeInfo(code!))
-              else if (tl.RpcError.is(err, 'PHONE_CODE_EXPIRED')) await update(loginId, 'code_expired', codeInfo(code!))
-              else if (tl.RpcError.is(err, 'SESSION_PASSWORD_NEEDED')) needsPassword = true
+              else if (tl.RpcError.is(err, 'PHONE_CODE_EXPIRED')) {
+                codeExpired = true
+                await update(loginId, 'code_expired', codeInfo(code!))
+              } else if (tl.RpcError.is(err, 'SESSION_PASSWORD_NEEDED')) needsPassword = true
               else throw err
             }
           }

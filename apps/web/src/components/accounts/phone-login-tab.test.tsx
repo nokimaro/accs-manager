@@ -84,6 +84,24 @@ describe('PhoneLoginTab', () => {
     expect(screen.queryByRole('button', { name: /Отправить/ })).not.toBeInTheDocument()
   })
 
+  it('after an expired code offers a fresh one even when Telegram has no next method, and says why a resend did not happen', async () => {
+    const user = userEvent.setup()
+    renderWithClient(<PhoneLoginTab onDone={vi.fn()} />)
+    await startLogin(user)
+    await phone({ ...codeSent, nextType: 'none', retryAfterSec: 0 })
+    expect(await screen.findByLabelText('Код')).toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: /Отправить|Запросить/ })).not.toBeInTheDocument()
+
+    await phone({ ...codeSent, nextType: 'none', state: 'code_expired' })
+    await user.click(screen.getByRole('button', { name: 'Запросить новый код' }))
+    await waitFor(() => expect(fetchMock).toHaveBeenCalledWith(`/api/phone-login/${LOGIN_ID}/resend`, expect.objectContaining({ method: 'POST' })))
+    // waiting for Telegram: no second request from a double click
+    expect(screen.getByRole('button', { name: 'Запросить новый код' })).toBeDisabled()
+
+    await phone({ ...codeSent, message: 'Telegram не отправил код повторно — введите код, который уже пришёл' })
+    expect(screen.getByText('Telegram не отправил код повторно — введите код, который уже пришёл')).toBeInTheDocument()
+  })
+
   it('keeps an event that arrives before POST /phone-login answers', async () => {
     let answer!: () => void
     fetchMock.mockImplementation(async (url: string) => {

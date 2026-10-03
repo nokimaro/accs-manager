@@ -29,11 +29,20 @@ type FakePhoneClient = PhoneClient & { destroyed: boolean; loggedOut: boolean; c
 /** Telegram as the test scripts it: the right code is 12345, the right cloud password «right» (if `twoFa`). */
 function scripted(
   tgUserId: number,
-  opts: { twoFa?: boolean; sendCode?: (signal?: AbortSignal) => Promise<SentCodeInfo | SessionProfile>; signInDelayMs?: number } = {},
+  opts: {
+    twoFa?: boolean
+    sendCode?: (signal?: AbortSignal) => Promise<SentCodeInfo | SessionProfile>
+    signInDelayMs?: number
+    /** seconds until «send again» works for the first code */
+    firstTimeoutSec?: number
+    /** Telegram refuses to send the code again */
+    refuseResend?: boolean
+  } = {},
 ) {
   const made: FakePhoneClient[] = []
   const factory: PhoneClientFactory = () => {
     let expired = false
+    let sendCount = 0
     const client: FakePhoneClient = {
       destroyed: false,
       loggedOut: false,
@@ -41,12 +50,17 @@ function scripted(
       calls: [],
       sendCode: async (phone, signal) => {
         client.calls.push(`sendCode ${phone}`)
-        return opts.sendCode ? opts.sendCode(signal) : sent()
+        sendCount++
+        expired = false
+        if (opts.sendCode) return opts.sendCode(signal)
+        return sent({ phoneCodeHash: sendCount === 1 ? 'hash-1' : `hash-fresh-${sendCount}`, ...(opts.firstTimeoutSec !== undefined ? { timeoutSec: opts.firstTimeoutSec } : {}) })
       },
+      // like Telegram: an expired code cannot be sent again, a fresh one is needed
       resendCode: async () => {
         client.calls.push('resendCode')
-        expired = false
-        return sent({ phoneCodeHash: 'hash-2', deliveryType: 'sms', nextType: 'call' })
+        if (expired) throw rpcError(400, 'PHONE_CODE_EXPIRED')
+        if (opts.refuseResend) throw rpcError(406, 'SEND_CODE_UNAVAILABLE')
+        return sent({ phoneCodeHash: 'hash-2', deliveryType: 'sms', nextType: 'call', timeoutSec: 60 })
       },
       signIn: async (_phone, hash, code) => {
         client.calls.push(`signIn ${hash} ${code}`)
@@ -129,7 +143,7 @@ describe('phone login', () => {
     expect(made[0]!.calls[0]).toBe('sendCode 77001234567')
   })
 
-  it('sends the code again by the next method, and after an expired code takes the new one', async () => {
+  it('asks Telegram for a fresh code after the old one expired', async () => {
     const loginId = randomUUID()
     const { factory, made } = scripted(61002)
     const { states, off, names } = await collect(loginId)
@@ -139,14 +153,44 @@ describe('phone login', () => {
     await vi.waitFor(() => expect(names()).toContain('code_expired'))
     await send(loginId, { type: 'resend' })
     await vi.waitFor(() => expect(names().filter((n) => n === 'code_sent')).toHaveLength(2))
-    expect(states.at(-1)).toMatchObject({ deliveryType: 'sms', nextType: 'call' })
     await send(loginId, { type: 'code', code: '12345' })
     await run
     await vi.waitFor(() => expect(states.at(-1)).toMatchObject({ state: 'done' }))
     off()
-    expect(made[0]!.calls).toContain('signIn hash-2 12345')
+    expect(made[0]!.calls).not.toContain('resendCode')
+    expect(made[0]!.calls).toContain('signIn hash-fresh-2 12345')
     const [account] = await w.t.db.select().from(accounts).where(eq(accounts.tgUserId, 61002))
     expect(account).toMatchObject({ source: 'phone', cloudPasswordEnc: null })
+  })
+
+  it('sends again by the next method only after the countdown, and keeps the login when Telegram refuses', async () => {
+    const loginId = randomUUID()
+    const { factory, made } = scripted(61011, { firstTimeoutSec: 0 })
+    const { states, off, names } = await collect(loginId)
+    const run = createPhoneLogin(w.deps, factory).run(start(loginId))
+    await vi.waitFor(() => expect(names()).toContain('code_sent'))
+    await send(loginId, { type: 'resend' })
+    await vi.waitFor(() => expect(names().filter((n) => n === 'code_sent')).toHaveLength(2))
+    expect(states.at(-1)).toMatchObject({ deliveryType: 'sms', nextType: 'call', retryAfterSec: 60 })
+    // a second click before Telegram's countdown is over does not reach Telegram
+    await send(loginId, { type: 'resend' })
+    await send(loginId, { type: 'code', code: '12345' })
+    await run
+    await vi.waitFor(() => expect(states.at(-1)).toMatchObject({ state: 'done' }))
+    off()
+    expect(made[0]!.calls.filter((c) => c === 'resendCode')).toHaveLength(1)
+
+    const refusedId = randomUUID()
+    const refused = scripted(61012, { firstTimeoutSec: 0, refuseResend: true })
+    const r = await collect(refusedId)
+    const run2 = createPhoneLogin(w.deps, refused.factory).run(start(refusedId))
+    await vi.waitFor(() => expect(r.names()).toContain('code_sent'))
+    await send(refusedId, { type: 'resend' })
+    await vi.waitFor(() => expect(r.states.at(-1)).toMatchObject({ state: 'code_sent', message: 'Telegram не отправил код повторно — введите код, который уже пришёл' }))
+    await send(refusedId, { type: 'code', code: '12345' })
+    await run2
+    await vi.waitFor(() => expect(r.states.at(-1)).toMatchObject({ state: 'done' }))
+    r.off()
   })
 
   it('refuses an account that is already in the panel and logs the new session out', async () => {
