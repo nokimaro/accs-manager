@@ -43,7 +43,7 @@
 | Прокси | Пул прокси; у аккаунта опциональный (рекомендуемый) прокси; SOCKS5 предпочтителен, HTTP поддерживается | Масштаб 50+ с одного IP; см. §6. |
 | Уведомления | Bot API `sendMessage` в приватный канал | Пожелание владельца; полноценный бот не нужен. |
 | Панель | Несколько админов, все равны; логин/пароль; глобальный аудит; первый админ — через CLI | Пожелание владельца. |
-| Настройки | **Типизированные настройки в БД**, определения — в коде на реестре **Zod 4**; раздел в админке строится из определений; применение без перезапуска. Собственная реализация. | `.env` разрастается, а смена любого параметра требовала рестарта. Готовые генераторы форм (`@rjsf/shadcn` — на Radix, AutoForm — устаревший shadcn-адаптер) не ложатся на Base UI и нужды раздела. |
+| Настройки | **Типизированные настройки в БД**, определения — в коде (zod 4-схемы + метаданные); раздел в админке строится из тех же определений; применение без перезапуска. Собственная реализация. | `.env` разрастается, а смена любого параметра требовала рестарта. Готовые генераторы форм (`@rjsf/shadcn` — на Radix, AutoForm — устаревший shadcn-адаптер) не ложатся на Base UI и нужды раздела. |
 | Фронтенд | React + Vite SPA, TanStack Router/Query, **только shadcn/ui (Base UI)** | Пожелание владельца. |
 | Стек | Node 26 (`node:26-trixie-slim`), PostgreSQL 18, Redis 8, pnpm 12, Hono, Drizzle, Zod 4 | Последние стабильные версии на 2026-10-03; Debian вместо alpine — выбор владельца. |
 
@@ -95,8 +95,10 @@ apps/
 packages/
   ui/         компоненты shadcn (создаётся shadcn CLI)
   db/         схема Drizzle, миграции, клиент
-  shared/     zod-схемы, контракты команд и событий, env-схема, crypto,
-              settings/ (реестр определений, типы, SettingsService)
+  shared/     без IO (импортируется и вебом): zod-схемы, контракты API и событий,
+              env-схема, crypto (только сервер), settings/ (определения, типы, валидация)
+  server/     серверные сервисы для api и worker: логгер, Redis, шина событий,
+              SettingsService, запись аудита
 ```
 
 ## 4. Модель данных (PostgreSQL, Drizzle)
@@ -295,8 +297,9 @@ active ──► error          неожиданная ошибка → повт
 - Пароли — argon2id (`node:crypto`). Сессия — случайный токен в cookie
   `httpOnly; Secure; SameSite=Strict`, в БД только хеш. Срок — `security.sessionTtl`.
 - CSRF: для изменяющих запросов проверяется `Origin` против `PUBLIC_ORIGIN`.
-- Rate limit на `/auth/login` в Redis по IP и по логину
-  (`security.loginMaxAttempts` за `security.loginWindow`).
+- Rate limit на `/auth/login` в Redis по IP и по логину: считаются только **неудачные**
+  попытки (`security.loginMaxAttempts` за `security.loginWindow`); успешный вход не
+  блокирует и сбрасывает счётчик логина.
 - `TRUST_PROXY` — доверять `X-Forwarded-For` от внешнего reverse proxy.
 
 ### Аудит
@@ -331,7 +334,7 @@ active ──► error          неожиданная ошибка → повт
 
 ### Определение
 
-Реестр на Zod 4 (`z.registry<SettingMeta>()`): каждая настройка — zod-схема + метаданные.
+Каждая настройка — zod 4-схема + типизированные метаданные в одном объекте определения.
 Хелперы по типам строят схему с ограничениями из определения:
 
 ```ts
@@ -364,8 +367,9 @@ settings.get('worker.connectConcurrency') // number
 | `secret` | строка, хранится зашифрованной, в API не возвращается | `InputGroup`: «задан / не задан», «Заменить», «Очистить» |
 
 Метаданные: `group`, `label`, `description`, `default`, `effect`
-(`immediate` / `new_connections` / `restart`), `order`. Группы (название, описание,
-порядок) — тоже в коде. Проекция для UI — `z.toJSONSchema()` + метаданные.
+(`immediate` / `new_connections` / `restart`), `order`, `required`. Группы (название, описание,
+порядок) — тоже в коде. SPA импортирует определения напрямую из `@workspace/shared/settings`
+и валидирует теми же схемами, что и сервер; API отдаёт только значения.
 Новый тип = один хелпер + один `case` в UI-компоненте `SettingField`.
 
 ### Набор настроек v1
@@ -405,9 +409,8 @@ settings.get('worker.connectConcurrency') // number
 
 ### API
 
-- `GET /settings` → группы и определения (проекция из кода: ключ, тип, метка, описание,
-  ограничения, `options`, умолчание, `effect`) + текущие значения; секреты —
-  `{isSet: boolean}`.
+- `GET /settings` → текущие значения по ключам (`value`, `isSet`, `overridden`,
+  `updatedAt`, `updatedBy`); у секретов `value` всегда `null`, есть только `isSet`.
 - `PATCH /settings` ← `{ "<key>": value | null }` (`null` — сбросить к умолчанию);
   атомарно: либо все изменения, либо ни одного; ошибки валидации — по ключам.
 - Аудит: `settings.update` с old/new значениями; секреты — `[redacted]`.
@@ -423,12 +426,13 @@ settings.get('worker.connectConcurrency') // number
 ### Навигация
 
 - **Desktop:** верхний navbar, без sidebar. Слева — название; табы
-  **Коды · Аккаунты · Прокси · Аудит · Админы · Настройки** (`NavigationMenu`, ссылки
-  TanStack Router через `render`, стиль line-табов, активный по текущему маршруту).
+  **Коды · Аккаунты · Прокси · Аудит · Админы · Настройки** — `Tabs` + `TabsList variant="line"`
+  в `<nav>`, триггеры — ссылки TanStack Router (`render`, `nativeButton={false}`), активный по
+  текущему маршруту.
   Справа — индикатор SSE-соединения и `DropdownMenu` админа (`Avatar` + `AvatarFallback`):
   сменить пароль, выйти.
-- **Mobile (< md):** бургер (`Button`) → `Sheet` слева (с `SheetTitle`) с теми же пунктами
-  вертикально.
+- **Mobile (< md):** бургер (`Button`) → `Sheet` слева (с `SheetTitle`) с теми же табами
+  `orientation="vertical"`.
 
 ### Страницы
 
@@ -448,8 +452,8 @@ settings.get('worker.connectConcurrency') // number
 
 ### Каркас
 
-`shadcn init --template vite --monorepo` с пресетом на Base UI (пресет выбирает владелец
-проекта: `base-nova` или код с ui.shadcn.com) → `apps/web` + `packages/ui`.
+`shadcn init --template vite --monorepo --preset nova --base base` → `apps/web` + `packages/ui`;
+тема — `blue` + базовый `mist` (`shadcn apply --only theme`).
 
 ## 11. Инфраструктура
 
@@ -460,7 +464,8 @@ settings.get('worker.connectConcurrency') // number
   `worker`. Пользователь `node`, `--init`, healthcheck.
 - **Правило:** без нативных зависимостей там, где есть чистый JS/WASM; при проблемах
   с образом — менять базу, а не архитектуру.
-- `compose.yml`:
+- `compose.yml` (все сервисы, контейнеры, тома и сеть — с префиксом `accs-`:
+  `accs-postgres`, `accs-redis`, `accs-migrate`, `accs-api`, `accs-pgdata`, `accs-redisdata`, `accs-net`):
   - `postgres:18-trixie` — volume на `/var/lib/postgresql` (с v18 образ хранит `PGDATA`
     в версионированном подкаталоге);
   - `redis:8-trixie` — `appendonly yes`, `maxmemory-policy noeviction` (требование BullMQ);
@@ -468,8 +473,10 @@ settings.get('worker.connectConcurrency') // number
     `service_completed_successfully`;
   - `api` — порт `3000`; `worker` — без портов, `stop_grace_period: 30s`;
   - Postgres и Redis наружу не публикуются.
-- `compose.dev.yml` — порты Postgres/Redis для локальной разработки; приложения
-  в dev — `pnpm dev`, Vite проксирует `/api` на api.
+- `compose.dev.yml` — порты Postgres/Redis для локальной разработки (настраиваемые:
+  `DEV_PG_PORT`/`DEV_REDIS_PORT`); приложения в dev — `pnpm dev`, Vite проксирует `/api` на api.
+- `api` и `worker` не собираются: Node 26 исполняет TypeScript напрямую (type stripping);
+  workspace-пакеты подключаются симлинками pnpm. Собирается только `web` (Vite).
 
 ### `.env` — только инфраструктура
 
