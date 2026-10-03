@@ -2867,8 +2867,10 @@ function fakeChecker(behaviour: { fail?: boolean; country?: string } = {}) {
   return checker
 }
 
+// a counter, not Math.random: the tests of this file share one database and endpoints are unique
+let nextHost = 0
 const insertProxy = async (values: Partial<typeof proxies.$inferInsert> = {}) =>
-  (await w.t.db.insert(proxies).values({ source: 'manual', type: 'socks5', host: `10.0.0.${Math.floor(Math.random() * 250)}`, port: 1080, ...values }).returning())[0]!
+  (await w.t.db.insert(proxies).values({ source: 'manual', type: 'socks5', host: `10.0.0.${++nextHost}`, port: 1080, ...values }).returning())[0]!
 
 const read = async (id: string) => (await w.t.db.select().from(proxies).where(eq(proxies.id, id)))[0]!
 
