@@ -2,7 +2,7 @@ import { auditLog } from '@workspace/db'
 import { desc, eq } from 'drizzle-orm'
 import { Hono } from 'hono'
 import { afterAll, beforeAll, describe, expect, it } from 'vitest'
-import type { AppEnv } from '../src/deps.ts'
+import type { AppDeps, AppEnv } from '../src/deps.ts'
 import { audited, auditTrail } from '../src/middleware/audit.ts'
 import { createAdmin } from '../src/services/admins.ts'
 import { loginAs, send, setupApp, uniqueLogin, type TestApp } from './helpers.ts'
@@ -18,10 +18,10 @@ afterAll(async () => {
 const lastAudit = async () => (await ta.t.db.select().from(auditLog).orderBy(desc(auditLog.id)).limit(1))[0]
 
 /** A tiny app that uses the real auditTrail middleware with routes that misbehave. */
-function probeApp() {
+function probeApp(deps: AppDeps = ta.deps) {
   const app = new Hono<AppEnv>()
   app.use('*', async (c, next) => {
-    c.set('deps', ta.deps)
+    c.set('deps', deps)
     c.set('clientIp', '10.5.5.5')
     c.set('admin', null)
     c.set('sessionId', null)
@@ -139,5 +139,51 @@ describe('audit trail', () => {
   it('never reads the body when audited() opts out with payload: null', async () => {
     await probeApp().request('/no-body', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ password: 'x' }) })
     expect(await lastAudit()).toMatchObject({ action: 'probe.nobody', payload: null })
+  })
+
+  it('audits an admin action whose body carries a NUL (Postgres jsonb would reject it)', async () => {
+    const { cookie } = await loginAs(ta)
+    const login = uniqueLogin()
+    const res = await send(ta.app, '/api/admins', { cookie, body: { login, password: 'long enough password', z: '\u0000' } })
+    expect(res.status).toBe(201)
+    const { id } = (await res.json()) as { id: string }
+    const [row] = await ta.t.db.select().from(auditLog).where(eq(auditLog.targetId, id))
+    expect(row).toMatchObject({ action: 'admin.create', result: 'ok', payload: { login, password: '[redacted]', z: '' } })
+  })
+
+  it('keeps the truncated preview well-formed when the cut splits a surrogate pair', async () => {
+    // JSON text: {"items":[" (11 chars) + emoji pairs, so the 2000-char preview ends inside a pair
+    await probeApp().request('/echo', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ items: Array.from({ length: 10 }, () => '😀'.repeat(1000)) }),
+    })
+    const row = await lastAudit()
+    expect(row).toMatchObject({ action: 'POST /echo', payload: { truncated: true } })
+    expect((row?.payload as { preview: string }).preview.isWellFormed()).toBe(true)
+  })
+
+  it('still records the action when the audit insert fails, without the payload', async () => {
+    let failures = 1
+    const flakyDb = new Proxy(ta.t.db, {
+      get(target, prop, receiver) {
+        if (prop === 'insert' && failures > 0) {
+          failures--
+          return () => {
+            throw new Error('insert failed')
+          }
+        }
+        return Reflect.get(target, prop, receiver)
+      },
+    })
+    const res = await probeApp({ ...ta.deps, db: flakyDb }).request('/echo', { method: 'POST', headers: { 'content-type': 'application/json' }, body: '{"a":1}' })
+    expect(res.status).toBe(200)
+    expect(await lastAudit()).toMatchObject({ action: 'POST /echo', result: 'ok', ip: '10.5.5.5', payload: { unrecordable: true } })
+
+    // both attempts failing never breaks the response
+    failures = 2
+    const before = (await lastAudit())?.id
+    expect((await probeApp({ ...ta.deps, db: flakyDb }).request('/echo', { method: 'POST' })).status).toBe(200)
+    expect((await lastAudit())?.id).toBe(before)
   })
 })

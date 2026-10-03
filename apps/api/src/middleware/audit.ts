@@ -1,4 +1,4 @@
-import { sanitizeForAudit, writeAudit, type AuditActor } from '@workspace/server'
+import { sanitizeForAudit, writeAudit, type AuditActor, type AuditRecord } from '@workspace/server'
 import type { Context } from 'hono'
 import { createMiddleware } from 'hono/factory'
 import { routePath } from 'hono/route'
@@ -45,7 +45,8 @@ async function readBody(c: Context<AppEnv>): Promise<unknown> {
 
 function capPayload(payload: unknown): unknown {
   const text = JSON.stringify(payload) ?? 'null'
-  return text.length > MAX_PAYLOAD_CHARS ? { truncated: true, preview: text.slice(0, 2_000) } : payload
+  // the cut may split a surrogate pair, which Postgres jsonb rejects
+  return text.length > MAX_PAYLOAD_CHARS ? { truncated: true, preview: text.slice(0, 2_000).toWellFormed() } : payload
 }
 
 /** Writes one audit_log row for every mutating request and every route marked with audited(). */
@@ -60,21 +61,28 @@ export const auditTrail = createMiddleware<AppEnv>(async (c, next) => {
   const actor: AuditActor = { type: 'admin', adminId: c.get('admin')?.id ?? overrides.adminId ?? null }
   const payload = overrides.payload !== undefined ? overrides.payload : await readBody(c)
   const { db, logger } = c.get('deps')
+  const record: AuditRecord = {
+    actor,
+    action: overrides.action ?? `${c.req.method} ${routePath(c)}`,
+    targetType: overrides.targetType ?? null,
+    targetId: overrides.targetId ?? null,
+    // sanitize BEFORE capping: a truncated preview is a raw JSON string that redaction can no longer see into
+    payload: capPayload(sanitizeForAudit(payload)),
+    ip: c.get('clientIp'),
+    userAgent: c.req.header('user-agent') ?? null,
+    statusCode: c.res.status,
+    result: c.res.status < 400 ? 'ok' : 'error',
+    durationMs: Math.round(performance.now() - startedAt),
+  }
   try {
-    await writeAudit(db, {
-      actor,
-      action: overrides.action ?? `${c.req.method} ${routePath(c)}`,
-      targetType: overrides.targetType ?? null,
-      targetId: overrides.targetId ?? null,
-      // sanitize BEFORE capping: a truncated preview is a raw JSON string that redaction can no longer see into
-      payload: capPayload(sanitizeForAudit(payload)),
-      ip: c.get('clientIp'),
-      userAgent: c.req.header('user-agent') ?? null,
-      statusCode: c.res.status,
-      result: c.res.status < 400 ? 'ok' : 'error',
-      durationMs: Math.round(performance.now() - startedAt),
-    })
+    await writeAudit(db, record)
   } catch (err) {
-    logger.error({ err }, 'audit: failed to write record')
+    // the action has happened: record it without the payload rather than not at all
+    logger.error({ err }, 'audit: failed to write record, retrying without the payload')
+    try {
+      await writeAudit(db, { ...record, payload: { unrecordable: true } })
+    } catch (retryErr) {
+      logger.error({ err: retryErr }, 'audit: failed to write record')
+    }
   }
 })

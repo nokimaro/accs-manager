@@ -1,5 +1,6 @@
 import { auditLog } from '@workspace/db'
 import { createTestDatabase, type TestDatabase } from '@workspace/db/testing'
+import { eq } from 'drizzle-orm'
 import { afterAll, beforeAll, describe, expect, inject, it } from 'vitest'
 import { sanitizeForAudit, writeAudit } from '../src/audit.ts'
 
@@ -27,6 +28,23 @@ describe('sanitizeForAudit', () => {
   })
 })
 
+describe('sanitizeForAudit: text Postgres jsonb would reject', () => {
+  it('strips NUL from values and keys, keeping the structure', () => {
+    expect(sanitizeForAudit({ 'a\u0000b': 'x\u0000y', list: ['\u0000', { 'k\u0000': 1 }] })).toEqual({ ab: 'xy', list: ['', { k: 1 }] })
+  })
+
+  it('still redacts a secret key hidden behind a NUL', () => {
+    expect(sanitizeForAudit({ 'pass\u0000word': 'p' })).toEqual({ password: '[redacted]' })
+  })
+
+  it('repairs lone surrogates, including a pair split by truncation', () => {
+    const out = sanitizeForAudit({ lone: 'a\ud83d', split: `${'x'.repeat(1999)}😀tail` }) as Record<string, string>
+    expect(out.lone).toBe('a\ufffd')
+    expect(out.split).toMatch(/…\[truncated\]$/)
+    expect(out.split?.isWellFormed()).toBe(true)
+  })
+})
+
 describe('writeAudit', () => {
   it('stores a sanitized record for each actor type', async () => {
     await writeAudit(t.db, { actor: { type: 'cli' }, action: 'admin.create', payload: { login: 'x', password: 'p' }, result: 'ok' })
@@ -36,5 +54,18 @@ describe('writeAudit', () => {
       ['cli', 'admin.create', 'ok', { login: 'x', password: '[redacted]' }],
       ['system', 'settings.reload', 'error', null],
     ])
+  })
+
+  it('stores records whose strings carry NUL or lone surrogates', async () => {
+    await writeAudit(t.db, {
+      actor: { type: 'cli' },
+      action: 'probe\u0000.write',
+      targetId: 'id\u0000',
+      userAgent: 'ua\u0000',
+      payload: { 'k\u0000': 'v\u0000', s: '\udc00' },
+      result: 'ok',
+    })
+    const [row] = await t.db.select().from(auditLog).where(eq(auditLog.action, 'probe.write'))
+    expect(row).toMatchObject({ targetId: 'id', userAgent: 'ua', payload: { k: 'v', s: '\ufffd' } })
   })
 })
