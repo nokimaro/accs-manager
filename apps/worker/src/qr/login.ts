@@ -89,19 +89,25 @@ export function createQrLogin(deps: WorkerDeps, factory: QrClientFactory, option
         }
         client = factory({ apiId, apiHash, device, proxy })
         const qrClient = client
+        let hint: string | null | undefined
+        // mtcute reports a wrong password and asks again at once: keep «неверный пароль» on screen until the next try
+        let passwordWasWrong = false
         const profile = await qrClient.signIn({
           abortSignal: abort.signal,
           onUrlUpdated: (url, expires) => void update(qrId, 'waiting', { url, expiresAt: expires.toISOString() }),
           onQrScanned: () => void update(qrId, 'scanned'),
           password: async () => {
-            const hint = await qrClient.passwordHint().catch(() => null)
-            await update(qrId, 'password_needed', hint ? { hint } : {})
+            if (hint === undefined) hint = await qrClient.passwordHint().catch(() => null)
+            if (!passwordWasWrong) await update(qrId, 'password_needed', hint ? { hint } : {})
             return new Promise<string>((resolve, reject) => {
               passwordWaiter = resolve
               abort.signal.addEventListener('abort', () => reject(abort.signal.reason), { once: true })
             })
           },
-          invalidPasswordCallback: () => void update(qrId, 'password_invalid'),
+          invalidPasswordCallback: () => {
+            passwordWasWrong = true
+            void update(qrId, 'password_invalid', hint ? { hint } : {})
+          },
         })
 
         const [existing] = await db.select({ id: accounts.id }).from(accounts).where(eq(accounts.tgUserId, profile.tgUserId))
@@ -134,6 +140,9 @@ export function createQrLogin(deps: WorkerDeps, factory: QrClientFactory, option
         await writeAudit(db, { actor: adminId ? { type: 'admin', adminId } : { type: 'system' }, action: 'account.qr.created', targetType: 'account', targetId: created!.id, result: 'ok' })
         await bus.publish({ type: 'accounts.changed', ids: [created!.id] })
         await update(qrId, 'done', { accountId: created!.id })
+        // one auth key — one client: the login client goes before the worker starts the account with the same key
+        await qrClient.destroy().catch(() => {})
+        client = undefined
         await options.onAccountCreated?.(created!.id)
       } catch (err) {
         const reason = abort.signal.aborted ? String((abort.signal.reason as Error)?.message) : null

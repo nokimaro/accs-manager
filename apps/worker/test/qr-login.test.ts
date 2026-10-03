@@ -68,7 +68,11 @@ describe('QR login', () => {
   it('walks through QR, scan and 2FA, then saves the account with its session and starts it', async () => {
     const qrId = randomUUID()
     const { factory, made } = scriptedFactory(31337, { twoFa: true })
-    const onAccountCreated = vi.fn()
+    // one auth key — one client: the QR client must be gone before the worker starts the account
+    const destroyedAtHandOff: boolean[] = []
+    const onAccountCreated = vi.fn(() => {
+      destroyedAtHandOff.push(made[0]!.destroyed)
+    })
     const { states, off } = await collect(qrId)
     const login = createQrLogin(w.deps, factory, { onAccountCreated })
     const run = login.run({ qrId, proxyId: null, adminId: null })
@@ -85,10 +89,12 @@ describe('QR login', () => {
     expect(account).toMatchObject({ source: 'qr', clientProfile: 'own', connectionMode: 'direct', status: 'pending_check', phone: '77009998877' })
     expect(w.deps.cipher.decrypt(account!.sessionImportEnc!)).toBe('exported-session')
     expect(onAccountCreated).toHaveBeenCalledWith(account!.id)
-    expect(states.map((s) => (s as { state: string }).state)).toEqual(['waiting', 'scanned', 'password_needed', 'password_invalid', 'password_needed', 'done'])
+    // «неверный пароль» stays on screen (with the hint) until the next try — mtcute asks for the password right after
+    expect(states.map((s) => (s as { state: string }).state)).toEqual(['waiting', 'scanned', 'password_needed', 'password_invalid', 'done'])
     expect(states[0]).toMatchObject({ url: 'tg://login?token=abc' })
     expect(states[2]).toMatchObject({ hint: 'кличка кота' })
-    expect(made[0]!.destroyed).toBe(true)
+    expect(states[3]).toMatchObject({ hint: 'кличка кота' })
+    expect(destroyedAtHandOff).toEqual([true])
   })
 
   it('logs the new session out when the account is already in the panel', async () => {
