@@ -300,7 +300,8 @@ active ──► error          неожиданная ошибка → повт
 - Rate limit на `/auth/login` в Redis по IP и по логину: считаются только **неудачные**
   попытки (`security.loginMaxAttempts` за `security.loginWindow`); успешный вход не
   блокирует и сбрасывает счётчик логина.
-- `TRUST_PROXY` — доверять `X-Forwarded-For` от внешнего reverse proxy.
+- `TRUST_PROXY` — доверять `X-Forwarded-For` от внешнего reverse proxy: IP клиента — крайний правый адрес
+  заголовка (его дописал наш proxy; левые адреса задаёт клиент).
 
 ### Аудит
 
@@ -322,7 +323,7 @@ active ──► error          неожиданная ошибка → повт
   `admin:disable --login <login>` — пароль интерактивно или `--password-stdin`.
 - `settings:get [<key>]`, `settings:set <key> <value>`, `settings:reset <key>` — для
   первичной настройки сервера без UI; секрет — через `--value-stdin`.
-- В контейнере: `docker compose exec api node dist/cli.js <команда>`.
+- В контейнере: `docker compose exec accs-api node apps/api/src/cli.ts <команда>` (сборки нет).
 - Действия CLI — в аудит с `actor_type=cli`.
 
 ## 9. Настройки
@@ -411,7 +412,7 @@ settings.get('worker.connectConcurrency') // number
 
 - `GET /settings` → текущие значения по ключам (`value`, `isSet`, `overridden`,
   `updatedAt`, `updatedBy`); у секретов `value` всегда `null`, есть только `isSet`.
-- `PATCH /settings` ← `{ "<key>": value | null }` (`null` — сбросить к умолчанию);
+- `PATCH /settings` ← `{ "changes": { "<key>": value | null } }` (`null` — сбросить к умолчанию);
   атомарно: либо все изменения, либо ни одного; ошибки валидации — по ключам.
 - Аудит: `settings.update` с old/new значениями; секреты — `[redacted]`.
 
@@ -491,7 +492,7 @@ settings.get('worker.connectConcurrency') // number
 | `REDIS_URL` | Redis |
 | `APP_ENCRYPTION_KEY` | мастер-ключ AES-256-GCM (32 байта, base64) |
 | `PUBLIC_ORIGIN` | внешний адрес панели (cookie, проверка `Origin`) |
-| `TRUST_PROXY` | доверять `X-Forwarded-For` |
+| `TRUST_PROXY` | доверять `X-Forwarded-For` (IP клиента — крайний правый адрес) |
 | `LOG_LEVEL` | уровень логов pino |
 
 Всё остальное — настройки в БД (§9). Логи — pino (JSON) с redaction ключей, паролей, токенов.
