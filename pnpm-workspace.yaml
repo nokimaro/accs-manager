@@ -10,3 +10,5 @@ allowBuilds:
   cpu-features: false
   ssh2: false
   protobufjs: false
+  # optional native msgpack speedup of bullmq; the pure-JS fallback is used
+  msgpackr-extract: false

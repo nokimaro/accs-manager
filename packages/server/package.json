@@ -13,6 +13,7 @@
   "dependencies": {
     "@workspace/db": "workspace:*",
     "@workspace/shared": "workspace:*",
+    "bullmq": "^6.3.11",
     "drizzle-orm": "^0.45.3",
     "ioredis": "^6.0.0",
     "pino": "^10.3.1",
