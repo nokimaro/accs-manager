@@ -2,7 +2,7 @@ import { appEventSchema, EVENTS_CHANNEL, type AppEvent } from '@workspace/shared
 import type { Redis } from 'ioredis'
 import type { Logger } from './logger.ts'
 
-export type EventHandler = (event: AppEvent) => void | Promise<void>
+export type EventHandler = (event: AppEvent) => unknown
 
 export interface EventBus {
   publish(event: AppEvent): Promise<void>

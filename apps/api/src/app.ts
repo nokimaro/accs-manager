@@ -10,7 +10,9 @@ import { originGuard } from './middleware/origin.ts'
 import { adminRoutes } from './routes/admins.ts'
 import { auditRoutes } from './routes/audit.ts'
 import { authRoutes } from './routes/auth.ts'
+import { eventRoutes } from './routes/events.ts'
 import { healthRoutes } from './routes/health.ts'
+import { settingsRoutes } from './routes/settings.ts'
 import { AdminError } from './services/admins.ts'
 
 const ADMIN_ERRORS = {
@@ -34,7 +36,9 @@ export function createApp(deps: AppDeps): Hono<AppEnv> {
   api.route('/', authRoutes)
   api.use('*', requireAuth)
   api.route('/', adminRoutes)
+  api.route('/', settingsRoutes)
   api.route('/', auditRoutes)
+  api.route('/', eventRoutes)
   api.all('*', (c) => c.json({ error: 'not_found' }, 404))
   app.route('/api', api)
 
