@@ -26,7 +26,7 @@ export const proxyRoutes = new Hono<AppEnv>()
     return c.json(proxy, 201)
   })
   // pasted lists carry passwords inline: the raw body never reaches the audit log
-  .post('/proxies/import/preview', zValidator('json', importProxiesInput, validationHook), async (c) =>
+  .post('/proxies/import/preview', audited('proxy.import.preview', { payload: null }), zValidator('json', importProxiesInput, validationHook), async (c) =>
     c.json(await previewProxyImport(c.get('deps').db, c.req.valid('json'))),
   )
   .post('/proxies/import', audited('proxy.import', { payload: null }), zValidator('json', importProxiesInput, validationHook), async (c) => {

@@ -61,6 +61,10 @@ describe('proxies api', () => {
         { line: 4, text: '194.53.188.98:50100:kz2:pw-two', reason: 'repeated' },
       ],
     })
+    // the preview is a POST too: the pasted passwords must not reach the audit log
+    const audit = JSON.stringify(await ta.t.db.select().from(auditLog))
+    expect(audit).not.toContain('s3cret-pass')
+    expect(audit).not.toContain('pw-two')
   })
 
   it('imports a list without writing the raw text into the audit log', async () => {
