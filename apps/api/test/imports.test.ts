@@ -88,8 +88,10 @@ describe('confirming an import', () => {
   async function prepared(users: number[]) {
     return (await (await upload(await makeTdataZip({ users }))).json()) as ImportBatchDto
   }
+  // a counter, not Math.random: the tests share one database and proxy endpoints are unique
+  let nextHost = 0
   const proxy = async (values: Partial<typeof proxies.$inferInsert> = {}) =>
-    (await ta.t.db.insert(proxies).values({ source: 'manual', type: 'socks5', host: `10.3.3.${Math.floor(Math.random() * 250)}`, port: 1080, status: 'ok', latencyMs: 100, ...values }).returning())[0]!
+    (await ta.t.db.insert(proxies).values({ source: 'manual', type: 'socks5', host: `10.3.3.${++nextHost}`, port: 1080, status: 'ok', latencyMs: 100, ...values }).returning())[0]!
 
   it('creates accounts with the chosen proxy, an automatic one or none, and starts them', async () => {
     const batch = await prepared([8001, 8002, 8003, 8004])
