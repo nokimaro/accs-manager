@@ -12,7 +12,8 @@
 
 ## Сервер
 
-Staging-бокс HOSTKEY `185.70.186.224` (Ubuntu 24.04), общий с p2c — их контейнеры и туннели не трогаем.
+Staging-бокс HOSTKEY (Ubuntu 24.04), общий с p2c — их контейнеры и туннели не трогаем. Адрес в репозиторий не пишем
+(он публичный): `gh variable get DEPLOY_HOST --env production`.
 Снаружи открыт только SSH (ключи + fail2ban), сайт доступен только через Cloudflare Tunnel.
 
 | Что | Где |
@@ -35,7 +36,7 @@ Staging-бокс HOSTKEY `185.70.186.224` (Ubuntu 24.04), общий с p2c — 
 ## Частые действия
 
 ```bash
-ssh root@185.70.186.224
+ssh root@"$(gh variable get DEPLOY_HOST --env production)"
 cd /opt/accs-manager
 cat deployed-sha
 sudo -u accs-deploy docker compose --project-directory repo -f repo/compose.yml -f repo/compose.prod.yml --env-file .env ps
