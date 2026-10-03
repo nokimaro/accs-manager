@@ -1,6 +1,7 @@
 import { existsSync } from 'node:fs'
 import { serveStatic } from '@hono/node-server/serve-static'
 import { Hono } from 'hono'
+import { bodyLimit } from 'hono/body-limit'
 import { HTTPException } from 'hono/http-exception'
 import type { AppDeps, AppEnv } from './deps.ts'
 import { resolveClientIp } from './lib/client-ip.ts'
@@ -14,6 +15,9 @@ import { eventRoutes } from './routes/events.ts'
 import { healthRoutes } from './routes/health.ts'
 import { settingsRoutes } from './routes/settings.ts'
 import { AdminError } from './services/admins.ts'
+
+/** Global cap on request bodies; plan-3 upload routes must be excluded and get their own route-level limit (import.maxZipSizeMb). */
+const MAX_BODY_BYTES = 1024 * 1024
 
 const ADMIN_ERRORS = {
   login_taken: [409, 'Логин уже занят'],
@@ -31,7 +35,15 @@ export function createApp(deps: AppDeps): Hono<AppEnv> {
   })
 
   const api = new Hono<AppEnv>()
-  api.use('*', originGuard, sessionLoader, auditTrail)
+  // first: nothing below (origin check, session lookup, audit, validators) may buffer an oversized body;
+  // enforced for chunked bodies too, and a 413 short-circuits before the audit trail
+  api.use(
+    '*',
+    bodyLimit({ maxSize: MAX_BODY_BYTES, onError: (c) => c.json({ error: 'payload_too_large', message: 'Слишком большой запрос' }, 413) }),
+    originGuard,
+    sessionLoader,
+    auditTrail,
+  )
   api.route('/', healthRoutes)
   api.route('/', authRoutes)
   api.use('*', requireAuth)
