@@ -1,4 +1,7 @@
-import { afterAll, beforeAll, describe, expect, it } from 'vitest'
+import type { EventBus } from '@workspace/server'
+import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest'
+import { createApp } from '../src/app.ts'
+import { disableAdmin } from '../src/services/admins.ts'
 import { loginAs, send, setupApp, type TestApp } from './helpers.ts'
 
 let ta: TestApp
@@ -20,6 +23,23 @@ async function readUntil(reader: ReadableStreamDefaultReader<Uint8Array>, needle
   return text
 }
 
+/** An app with a short heartbeat whose bus counts live SSE subscriptions. */
+function streamingApp(heartbeatMs: number) {
+  const counter = { active: 0 }
+  const bus: EventBus = {
+    ...ta.bus,
+    subscribe(handler) {
+      counter.active++
+      const off = ta.bus.subscribe(handler)
+      return () => {
+        counter.active--
+        off()
+      }
+    },
+  }
+  return { app: createApp({ ...ta.deps, bus, sseHeartbeatMs: heartbeatMs }), counter }
+}
+
 describe('SSE /api/events', () => {
   it('streams bus events to an authenticated client', async () => {
     const { cookie } = await loginAs(ta)
@@ -38,5 +58,34 @@ describe('SSE /api/events', () => {
 
   it('rejects anonymous clients', async () => {
     expect((await send(ta.app, '/api/events')).status).toBe(401)
+  })
+
+  type Me = Awaited<ReturnType<typeof loginAs>>
+  it.each<[string, (me: Me) => Promise<unknown>]>([
+    ['the session is revoked (logout elsewhere)', (me) => send(ta.app, '/api/auth/logout', { method: 'POST', cookie: me.cookie })],
+    ['the admin is disabled', (me) => disableAdmin(ta.deps.db, me.id)],
+  ])('sends `unauthorized` and ends the stream once %s', async (_case, revoke) => {
+    await loginAs(ta) // keeps another active admin around, so disabling `me` is allowed
+    const me = await loginAs(ta)
+    const { app, counter } = streamingApp(100)
+    const reader = (await send(app, '/api/events', { cookie: me.cookie })).body!.getReader()
+    await readUntil(reader, 'event: ready')
+    expect(counter.active).toBe(1)
+
+    await revoke(me)
+    expect(await readUntil(reader, 'event: unauthorized')).toContain('event: unauthorized')
+    expect((await reader.read()).done).toBe(true)
+    await vi.waitFor(() => expect(counter.active).toBe(0))
+  })
+
+  it('releases the bus subscription and the heartbeat timer as soon as the client goes away', async () => {
+    const { cookie } = await loginAs(ta)
+    const { app, counter } = streamingApp(60_000)
+    const reader = (await send(app, '/api/events', { cookie })).body!.getReader()
+    await readUntil(reader, 'event: ready')
+    expect(counter.active).toBe(1)
+    await reader.cancel()
+    // not after the next 60 s heartbeat
+    await vi.waitFor(() => expect(counter.active).toBe(0))
   })
 })

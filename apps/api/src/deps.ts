@@ -12,6 +12,8 @@ export interface AppDeps {
   logger: Logger
   /** absolute path to the built SPA; static serving is skipped when undefined */
   webDistDir?: string
+  /** SSE keep-alive interval; the session is re-validated on every beat (default 25 s) */
+  sseHeartbeatMs?: number
 }
 
 export interface SessionAdmin {

@@ -2,7 +2,7 @@ import { useQueryClient } from '@tanstack/react-query'
 import { createFileRoute, Outlet, redirect } from '@tanstack/react-router'
 import { toast } from '@workspace/ui/components/toast'
 import { AppHeader } from '@/components/app-header'
-import { meQueryOptions } from '@/lib/auth'
+import { meQueryOptions, recheckSession } from '@/lib/auth'
 import { settingsQueryOptions } from '@/lib/settings'
 import { useEventStream } from '@/lib/use-event-stream'
 
@@ -18,11 +18,17 @@ export const Route = createFileRoute('/_authed')({
 function AuthedLayout() {
   const { me } = Route.useRouteContext()
   const queryClient = useQueryClient()
-  const streamStatus = useEventStream((event) => {
-    if (event.type === 'settings.changed') {
-      void queryClient.invalidateQueries({ queryKey: settingsQueryOptions.queryKey })
-      if (event.by !== me.id) toast.add({ title: 'Настройки изменены', description: 'Другой админ или CLI обновил настройки.' })
-    }
+  const streamStatus = useEventStream({
+    onEvent: (event) => {
+      if (event.type === 'settings.changed') {
+        void queryClient.invalidateQueries({ queryKey: settingsQueryOptions.queryKey })
+        if (event.by !== me.id) toast.add({ title: 'Настройки изменены', description: 'Другой админ или CLI обновил настройки.' })
+      }
+    },
+    // a revoked session ends at the global 401 handler (→ /login)
+    onSessionLost: () => void recheckSession(queryClient),
+    // events sent while the stream was down are lost: refetch what is on screen
+    onReconnect: () => void queryClient.invalidateQueries(),
   })
   return (
     <div className="flex min-h-svh flex-col">

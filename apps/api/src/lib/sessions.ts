@@ -1,6 +1,6 @@
 import { createHash, randomBytes } from 'node:crypto'
 import { admins, adminSessions, type Db } from '@workspace/db'
-import { and, eq, gt, isNull } from 'drizzle-orm'
+import { and, eq, gt, isNull, type SQL } from 'drizzle-orm'
 import type { SessionAdmin } from '../deps.ts'
 
 export const SESSION_COOKIE = 'accs_session'
@@ -23,15 +23,26 @@ export async function createSession(
   return { token, expiresAt }
 }
 
+type FoundSession = { sessionId: string; admin: SessionAdmin }
+
 /** Valid = not expired and the admin is not disabled. */
-export async function findSession(db: Db, token: string): Promise<{ sessionId: string; admin: SessionAdmin } | null> {
+async function findValidSession(db: Db, match: SQL): Promise<FoundSession | null> {
   const [row] = await db
     .select({ sessionId: adminSessions.id, id: admins.id, login: admins.login })
     .from(adminSessions)
     .innerJoin(admins, eq(admins.id, adminSessions.adminId))
-    .where(and(eq(adminSessions.tokenHash, hashToken(token)), gt(adminSessions.expiresAt, new Date()), isNull(admins.disabledAt)))
+    .where(and(match, gt(adminSessions.expiresAt, new Date()), isNull(admins.disabledAt)))
     .limit(1)
   return row ? { sessionId: row.sessionId, admin: { id: row.id, login: row.login } } : null
+}
+
+export function findSession(db: Db, token: string): Promise<FoundSession | null> {
+  return findValidSession(db, eq(adminSessions.tokenHash, hashToken(token)))
+}
+
+/** Re-validates an already resolved session (long-lived requests such as the SSE stream). */
+export function findSessionById(db: Db, sessionId: string): Promise<FoundSession | null> {
+  return findValidSession(db, eq(adminSessions.id, sessionId))
 }
 
 export async function deleteSession(db: Db, sessionId: string): Promise<void> {
