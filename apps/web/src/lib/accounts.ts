@@ -1,4 +1,4 @@
-import { queryOptions } from '@tanstack/react-query'
+import { infiniteQueryOptions, queryOptions } from '@tanstack/react-query'
 import type { AccountDto, AccountSessionDto, AccountStatus, CodeDto } from '@workspace/shared/accounts'
 import type { ProxyDto } from '@workspace/shared/proxies'
 import { api } from './api'
@@ -26,6 +26,22 @@ export const codesQueryOptions = (accountId?: string) =>
   queryOptions({
     queryKey: ['codes', accountId ?? 'all'] as const,
     queryFn: ({ signal }) => api<{ items: CodeDto[] }>(`/codes?limit=100${accountId ? `&accountId=${accountId}` : ''}`, { signal }),
+  })
+
+export const CODES_PAGE_SIZE = 50
+
+/** The codes feed: newest first, «показать ещё» pages back by id. */
+export const codesFeedQueryOptions = (accountId?: string) =>
+  infiniteQueryOptions({
+    queryKey: ['codes', accountId ?? 'all', 'feed'] as const,
+    queryFn: ({ pageParam, signal }) => {
+      const params = new URLSearchParams({ limit: String(CODES_PAGE_SIZE) })
+      if (accountId) params.set('accountId', accountId)
+      if (pageParam) params.set('before', String(pageParam))
+      return api<{ items: CodeDto[] }>(`/codes?${params}`, { signal })
+    },
+    initialPageParam: null as number | null,
+    getNextPageParam: (last) => (last.items.length === CODES_PAGE_SIZE ? last.items.at(-1)!.id : null),
   })
 
 export const accountStatusVariant: Record<AccountStatus, 'secondary' | 'outline' | 'destructive'> = {

@@ -6,7 +6,7 @@ import { formatDateTime, formatRelative } from '@/lib/format'
 import { CopyCodeButton } from './copy-code-button'
 
 /** Messages from @VerificationCodes, newest first. `showAccount` — for the shared feed. */
-export function CodesTable({ items, showAccount, empty }: { items: CodeDto[]; showAccount?: boolean; empty: string }) {
+export function CodesTable({ items, showAccount, empty, fresh }: { items: CodeDto[]; showAccount?: boolean; empty: string; fresh?: ReadonlySet<number> }) {
   return (
     <div className="overflow-hidden rounded-lg border">
       <Table>
@@ -23,7 +23,10 @@ export function CodesTable({ items, showAccount, empty }: { items: CodeDto[]; sh
             items.map((c) => (
               <TableRow key={c.id}>
                 <TableCell className="whitespace-nowrap" title={formatDateTime(c.date)}>
-                  {formatRelative(c.date)}
+                  <span className="flex items-center gap-2">
+                    {formatRelative(c.date)}
+                    {fresh?.has(c.id) && <Badge>новый</Badge>}
+                  </span>
                 </TableCell>
                 {showAccount && (
                   <TableCell>

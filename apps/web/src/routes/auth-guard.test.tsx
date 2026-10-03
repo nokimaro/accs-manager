@@ -8,6 +8,13 @@ import { handleUnauthorized } from '@/lib/session'
 
 const json = (body: unknown, status = 200) => new Response(JSON.stringify(body), { status, headers: { 'content-type': 'application/json' } })
 
+/** API of a signed-in admin with nothing configured yet: settings are a map, every list is empty. */
+const signedIn = (url: string) => {
+  if (url.endsWith('/auth/me')) return json({ id: 'a1', login: 'root' })
+  if (url.endsWith('/settings')) return json({ items: {} })
+  return json({ items: [] })
+}
+
 function setup(path: string) {
   const queryClient = createQueryClient(() => handleUnauthorized(queryClient, router))
   const router = createAppRouter(queryClient, createMemoryHistory({ initialEntries: [path] }))
@@ -70,7 +77,7 @@ it('redirects anonymous users to /login and keeps the target', async () => {
 
 it('renders the shell with the active tab for signed-in admins', async () => {
   vi.stubGlobal('EventSource', SilentEventSource)
-  vi.stubGlobal('fetch', vi.fn(async (url: string) => (url.endsWith('/auth/me') ? json({ id: 'a1', login: 'root' }) : json({ items: {} }))))
+  vi.stubGlobal('fetch', vi.fn(async (url: string) => (signedIn(url))))
   setup('/')
   expect(await screen.findByRole('heading', { name: 'Коды' })).toBeInTheDocument()
   expect(screen.getAllByRole('tab', { name: 'Коды' })[0]).toHaveAttribute('aria-selected', 'true')
@@ -84,7 +91,7 @@ it('returns to /login when the session is revoked while browsing', async () => {
     'fetch',
     vi.fn(async (url: string) => {
       if (revoked) return json({ error: 'unauthorized' }, 401)
-      return url.endsWith('/auth/me') ? json({ id: 'a1', login: 'root' }) : json({ items: {} })
+      return signedIn(url)
     }),
   )
   const { router, queryClient } = setup('/')
@@ -100,7 +107,7 @@ async function signedInWithStream() {
   const state = { revoked: false }
   const fetchMock = vi.fn(async (url: string) => {
     if (state.revoked) return json({ error: 'unauthorized' }, 401)
-    return url.endsWith('/auth/me') ? json({ id: 'a1', login: 'root' }) : json({ items: {} })
+    return signedIn(url)
   })
   vi.stubGlobal('fetch', fetchMock)
   const { router } = setup('/')
@@ -148,7 +155,7 @@ it('shows an error screen with a retry instead of a blank page when the API is d
   vi.stubGlobal('EventSource', SilentEventSource)
   vi.stubGlobal('fetch', vi.fn(async (url: string) => {
     if (!up) return json({ error: 'internal' }, 502)
-    return url.endsWith('/auth/me') ? json({ id: 'a1', login: 'root' }) : json({ items: {} })
+    return signedIn(url)
   }))
   setup('/')
   expect(await screen.findByText('Не удалось загрузить страницу')).toBeInTheDocument()
@@ -159,7 +166,7 @@ it('shows an error screen with a retry instead of a blank page when the API is d
 
 it('shows «not found» for an unknown address', async () => {
   vi.stubGlobal('EventSource', SilentEventSource)
-  vi.stubGlobal('fetch', vi.fn(async (url: string) => (url.endsWith('/auth/me') ? json({ id: 'a1', login: 'root' }) : json({ items: {} }))))
+  vi.stubGlobal('fetch', vi.fn(async (url: string) => (signedIn(url))))
   setup('/no-such-page')
   expect(await screen.findByText('Страница не найдена')).toBeInTheDocument()
   expect(screen.getByRole('button', { name: 'На главную' })).toHaveAttribute('href', '/')

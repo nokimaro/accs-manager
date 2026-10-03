@@ -5,7 +5,7 @@ import { accountTitle, FINAL_STATUSES, RUNNING_STATUSES, type AccountDto } from 
 import { Alert, AlertDescription, AlertTitle } from '@workspace/ui/components/alert'
 import { Badge } from '@workspace/ui/components/badge'
 import { Button } from '@workspace/ui/components/button'
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@workspace/ui/components/card'
+import { Card, CardAction, CardContent, CardDescription, CardHeader, CardTitle } from '@workspace/ui/components/card'
 import { toast } from '@workspace/ui/components/toast'
 import { ArrowLeftIcon, PauseIcon, PlayIcon, RefreshCwIcon } from 'lucide-react'
 import { AccountNotesForm } from '@/components/accounts/account-notes-form'
@@ -102,7 +102,7 @@ function AccountPage() {
   return (
     <div className="flex flex-col gap-6">
       <div>
-        <Button variant="ghost" size="sm" render={<Link to="/accounts" />}>
+        <Button variant="ghost" size="sm" render={<Link to="/accounts" />} nativeButton={false}>
           <ArrowLeftIcon data-icon="inline-start" />
           Аккаунты
         </Button>
@@ -194,6 +194,11 @@ function AccountPage() {
         <CardHeader>
           <CardTitle>Коды</CardTitle>
           <CardDescription>Сообщения от @VerificationCodes, последние 100.</CardDescription>
+          <CardAction>
+            <Button variant="outline" size="sm" render={<Link to="/" search={{ account: a.id }} />} nativeButton={false}>
+              В ленте кодов
+            </Button>
+          </CardAction>
         </CardHeader>
         <CardContent>
           {codes.data ? <CodesTable items={codes.data.items} empty="Кодов пока не было" /> : <p className="text-muted-foreground text-sm">Загрузка…</p>}
