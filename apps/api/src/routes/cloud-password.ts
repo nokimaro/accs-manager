@@ -8,6 +8,7 @@ import type {
   CloudPasswordSetResult,
   CloudPasswordVerifyResult,
 } from '@workspace/shared/commands'
+import { formatWait } from '@workspace/shared/duration'
 import { Hono } from 'hono'
 import { z } from 'zod'
 import type { AppEnv } from '../deps.ts'
@@ -31,6 +32,8 @@ function refusal(result: CloudPasswordError): DomainError {
       return new DomainError(409, 'password_unknown', 'Панель не знает текущий пароль — введите его')
     case 'too_fresh':
       return new DomainError(409, 'too_fresh', `Telegram пока не даёт менять пароль с этой сессии — подождите ${Math.max(1, Math.ceil(result.retryAfterSec / 3600))} ч`)
+    case 'flood':
+      return new DomainError(409, 'flood', `Слишком много попыток — подождите ${formatWait(result.retryAfterSec)}`)
     case 'email_invalid':
       return new DomainError(422, 'email_invalid', 'Неверная почта')
     case 'code_invalid':

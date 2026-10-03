@@ -251,6 +251,10 @@ describe('phone login', () => {
         async () => Promise.reject(Object.assign(rpcError(420, 'FLOOD_WAIT_%d'), { seconds: 600 })),
         'Слишком много попыток — подождите 10 мин',
       ],
+      [
+        async () => Promise.reject(Object.assign(rpcError(420, 'FLOOD_WAIT_%d'), { seconds: 86_400 })),
+        'Слишком много попыток — подождите 24 ч',
+      ],
       [async () => sent({ deliveryType: 'email_required' }), 'Telegram требует привязать почту для входа — сделайте это в официальном приложении'],
       [
         async () => Promise.reject(new Error('Payment is required to sign in, please log in with a first-party client first')),

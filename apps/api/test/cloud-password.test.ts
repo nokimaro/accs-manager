@@ -95,6 +95,7 @@ describe('cloud password api', () => {
       [{ error: 'password_unknown' }, 409, 'password_unknown', 'Панель не знает текущий пароль — введите его'],
       [{ error: 'too_fresh', retryAfterSec: 80_000 }, 409, 'too_fresh', 'Telegram пока не даёт менять пароль с этой сессии — подождите 23 ч'],
       [{ error: 'email_invalid' }, 422, 'email_invalid', 'Неверная почта'],
+      [{ error: 'flood', retryAfterSec: 7_200 }, 409, 'flood', 'Слишком много попыток — подождите 2 ч'],
       [{ error: 'other', message: '400 PASSWORD_HINT_INVALID' }, 503, 'telegram_error', 'Telegram отказал: 400 PASSWORD_HINT_INVALID'],
     ]
     for (const [respond, status, error, message] of cases) {

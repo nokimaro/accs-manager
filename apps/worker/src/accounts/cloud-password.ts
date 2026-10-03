@@ -75,7 +75,9 @@ export function createCloudPassword(deps: WorkerDeps, runningSession: (accountId
    */
   async function reconcile(accountId: string, session: TelegramSession): Promise<Known> {
     const state = await session.passwordState()
-    let { stored, pending } = await load(accountId)
+    const loaded = await load(accountId)
+    const pending = loaded.pending
+    let stored = loaded.stored
     let recoveryEmail: string | null = null
     if (pending !== null) {
       const applied = await accepts(session, state, pending)
@@ -83,10 +85,8 @@ export function createCloudPassword(deps: WorkerDeps, runningSession: (accountId
         await save(accountId, { stored: pending, pending: null })
         return { state, stored: pending, recoveryEmail: applied.email, forgotten: false }
       }
-      if (!state.unconfirmedEmailPattern) {
-        await save(accountId, { pending: null })
-        pending = null
-      }
+      // no email waits any more (confirmed with another password, or skipped): Telegram will never apply it
+      if (!state.unconfirmedEmailPattern) await save(accountId, { pending: null })
     }
     let forgotten = false
     if (stored !== null) {
@@ -109,6 +109,8 @@ export function createCloudPassword(deps: WorkerDeps, runningSession: (accountId
         case 'SESSION_TOO_FRESH_%d':
         case 'PASSWORD_TOO_FRESH_%d':
           return { error: 'too_fresh', retryAfterSec: seconds ?? 0 }
+        case 'FLOOD_WAIT_%d':
+          return { error: 'flood', retryAfterSec: seconds ?? 0 }
         case 'EMAIL_INVALID':
           return { error: 'email_invalid' }
         case 'CODE_INVALID':

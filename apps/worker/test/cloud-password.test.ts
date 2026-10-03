@@ -99,6 +99,12 @@ describe('cloud password', () => {
     await a.manager.stopAll()
   })
 
+  it('reports how long Telegram asks to wait after too many attempts', async () => {
+    const a = await connected((s) => (s.twoFa.floodSec = 600))
+    expect(await a.service.set(a.id, { currentPasswordEnc: null, newPasswordEnc: enc('n'), hint: null, email: null })).toEqual({ error: 'flood', retryAfterSec: 600 })
+    await a.manager.stopAll()
+  })
+
   it('holds a password set with a recovery email as pending until Telegram applies it; confirms, resends or drops the email', async () => {
     const a = await connected()
     expect(await a.service.set(a.id, { currentPasswordEnc: null, newPasswordEnc: enc('p'), hint: null, email: 'not-an-email' })).toEqual({ error: 'email_invalid' })

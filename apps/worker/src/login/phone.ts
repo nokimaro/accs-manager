@@ -1,7 +1,7 @@
 import { tl } from '@mtcute/core'
 import type { PhoneLoginState } from '@workspace/shared/accounts'
 import { loginControlChannel, loginControlSchema, type LoginControl } from '@workspace/shared/commands'
-import { parseDuration } from '@workspace/shared/duration'
+import { formatWait, parseDuration } from '@workspace/shared/duration'
 import type { WorkerDeps } from '../deps.ts'
 import type { SessionProfile } from '../telegram/session.ts'
 import { createLoginKit, LoginFailure } from './common.ts'
@@ -44,7 +44,7 @@ export function phoneLoginError(err: unknown): string {
       case 'PHONE_NUMBER_UNOCCUPIED':
         return 'На этот номер нет аккаунта Telegram — регистрация через панель не поддерживается'
       case 'FLOOD_WAIT_%d':
-        return `Слишком много попыток — подождите ${Math.max(1, Math.ceil((err as tl.RpcError & { seconds?: number }).seconds! / 60))} мин`
+        return `Слишком много попыток — подождите ${formatWait((err as tl.RpcError & { seconds?: number }).seconds ?? 0)}`
       case 'PHONE_PASSWORD_FLOOD':
         return 'Слишком много попыток ввода пароля — подождите'
       default:

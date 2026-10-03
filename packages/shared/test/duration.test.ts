@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { formatDuration, isDuration, parseDuration } from '../src/duration.ts'
+import { formatWait, formatDuration, isDuration, parseDuration } from '../src/duration.ts'
 
 describe('duration', () => {
   it('parses all units', () => {
@@ -23,3 +23,13 @@ describe('duration', () => {
     expect(formatDuration(0)).toBe('0s')
   })
 })
+
+describe('formatWait', () => {
+  it('says how long to wait in minutes, and in hours from one hour on', () => {
+    expect(formatWait(30)).toBe('1 мин')
+    expect(formatWait(600)).toBe('10 мин')
+    expect(formatWait(3_600)).toBe('1 ч')
+    expect(formatWait(86_400)).toBe('24 ч')
+  })
+})
+

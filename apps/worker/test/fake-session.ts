@@ -78,6 +78,7 @@ export class FakeSession implements TelegramSession {
     pending: null as { email: string; code: string; password: string; hint: string | null } | null,
     pendingResetAt: null as Date | null,
     tooFreshSec: 0,
+    floodSec: 0,
     applyBeforeEmailConfirmed: false,
   }
   passwordState = vi.fn(
@@ -95,6 +96,7 @@ export class FakeSession implements TelegramSession {
   })
   setPassword = vi.fn(async (p: SetPasswordParams) => {
     if (this.twoFa.tooFreshSec) throw Object.assign(rpcError(400, 'SESSION_TOO_FRESH_%d'), { seconds: this.twoFa.tooFreshSec })
+    if (this.twoFa.floodSec) throw Object.assign(rpcError(420, 'FLOOD_WAIT_%d'), { seconds: this.twoFa.floodSec })
     if (this.twoFa.password !== null && p.current !== this.twoFa.password) throw rpcError(400, 'PASSWORD_HASH_INVALID')
     if (p.email !== null && !p.email.includes('@')) throw rpcError(400, 'EMAIL_INVALID')
     if (p.email === null || this.twoFa.applyBeforeEmailConfirmed) {

@@ -51,6 +51,8 @@ export type CloudPasswordError =
   /** the account has a password the panel does not know, and none was given */
   | { error: 'password_unknown' }
   | { error: 'too_fresh'; retryAfterSec: number }
+  /** FLOOD_WAIT: too many attempts */
+  | { error: 'flood'; retryAfterSec: number }
   | { error: 'email_invalid' }
   | { error: 'code_invalid' }
   | { error: 'code_expired' }

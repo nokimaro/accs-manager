@@ -25,3 +25,8 @@ export function formatDuration(ms: number): string {
   if (ms === 0) return '0s'
   throw new Error(`Milliseconds not representable in whole seconds: ${ms}`)
 }
+
+/** «10 мин», «2 ч»: how long Telegram asks to wait, rounded up; hours from one hour on. */
+export function formatWait(seconds: number): string {
+  return seconds < 3_600 ? `${Math.max(1, Math.ceil(seconds / 60))} мин` : `${Math.ceil(seconds / 3_600)} ч`
+}
