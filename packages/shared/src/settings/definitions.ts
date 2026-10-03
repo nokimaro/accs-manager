@@ -75,9 +75,9 @@ export const settingsDef = {
     help: `Создайте бота у @BotFather (команда /newbot) и вставьте выданный токен вида 123456789:AA…. Затем добавьте бота в канал администратором с правом публиковать сообщения.\n\n${SECRET_NOTE}`,
   }),
   'notify.chatId': string({
-    group: 'notifications', label: 'ID канала', default: null, pattern: /^-?\d+$/, patternMessage: 'Числовой ID, например -1001234567890',
-    description: 'Числовой ID канала, например -1001234567890.',
-    help: 'Куда бот отправляет уведомления. ID каналов начинается с -100. Узнать его проще всего, открыв канал в web.telegram.org: ID — число в адресной строке после «#».',
+    group: 'notifications', label: 'ID канала', default: null, pattern: /^-100\d+$/, patternMessage: 'ID канала начинается с -100, например -1001234567890',
+    description: 'Полный ID канала для Bot API — начинается с -100.',
+    help: 'Куда бот отправляет уведомления. Bot API принимает ID канала только в полном виде: -100 и номер канала, например -1001234567890.\n\nВ web.telegram.org/k адрес открытого канала выглядит как #-1234567890 — это номер без префикса: допишите 100 после минуса. Если ID в адресе уже начинается с -100, берите его как есть.',
   }),
   'notify.events': multiselect({
     group: 'notifications', label: 'О чём уведомлять', options: notifyEventOptions, default: ['code', 'proxy_down', 'unauthorized', 'banned', 'frozen', 'proxy_expiring'],

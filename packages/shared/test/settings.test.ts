@@ -96,6 +96,14 @@ describe('settings v1 definitions', () => {
 })
 
 describe('validateSettingChanges', () => {
+  it('requires the full -100… channel id that the Bot API expects', () => {
+    expect(validateSettingChanges({ 'notify.chatId': '-1003508630500' }).ok).toBe(true)
+    // web.telegram.org/k shows channels without the -100 prefix
+    const r = validateSettingChanges({ 'notify.chatId': '-3508630500' })
+    expect(r.ok).toBe(false)
+    if (!r.ok) expect(r.errors['notify.chatId']).toBe('ID канала начинается с -100, например -1001234567890')
+  })
+
   it('accepts valid changes and null resets', () => {
     const r = validateSettingChanges({ 'worker.connectConcurrency': 10, 'notify.botToken': null })
     expect(r.ok).toBe(true)
