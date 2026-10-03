@@ -31,13 +31,25 @@ async function shutdown(signal: string): Promise<void> {
   if (stopping) return
   stopping = true
   logger.info({ signal }, 'api: shutting down')
-  server.close()
-  // open SSE streams would keep close() waiting forever
-  if ('closeAllConnections' in server) server.closeAllConnections()
-  settings.close()
-  await bus.close()
-  await Promise.allSettled([redis.quit(), subscriber.quit(), database.close()])
-  process.exit(0)
+  // hard stop if anything below hangs
+  setTimeout(() => process.exit(1), 10_000).unref()
+  try {
+    await new Promise<void>((resolve) => {
+      server.close(() => resolve())
+      if ('closeIdleConnections' in server) server.closeIdleConnections()
+      // SSE streams never end on their own: give in-flight requests a moment, then drop the rest
+      setTimeout(() => {
+        if ('closeAllConnections' in server) server.closeAllConnections()
+      }, 3_000).unref()
+    })
+    settings.close()
+    await bus.close()
+  } catch (err) {
+    logger.error({ err }, 'api: error during shutdown')
+  } finally {
+    await Promise.allSettled([redis.quit(), subscriber.quit(), database.close()])
+    process.exit(0)
+  }
 }
 process.on('SIGTERM', () => void shutdown('SIGTERM'))
 process.on('SIGINT', () => void shutdown('SIGINT'))
