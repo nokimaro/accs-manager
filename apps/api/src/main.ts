@@ -1,14 +1,16 @@
 import { fileURLToPath } from 'node:url'
 import { serve } from '@hono/node-server'
 import { createDb } from '@workspace/db'
-import { createEventBus, createLogger, createRedis, SettingsService } from '@workspace/server'
+import { createEventBus, createLogger, createRedis, exitOnFatalErrors, SettingsService } from '@workspace/server'
 import { createCipher } from '@workspace/shared/crypto'
 import { loadEnv } from '@workspace/shared/env'
 import { createApp } from './app.ts'
 
 const env = loadEnv()
 const logger = createLogger({ level: env.LOG_LEVEL, pretty: env.NODE_ENV === 'development', name: 'api' })
-const database = createDb(env.DATABASE_URL)
+exitOnFatalErrors(logger)
+// a Postgres restart breaks idle connections: log it, the pool reconnects on demand
+const database = createDb(env.DATABASE_URL, { onError: (err) => logger.warn({ err }, 'postgres: idle client error') })
 const redis = createRedis(env.REDIS_URL, 'api', logger)
 const subscriber = createRedis(env.REDIS_URL, 'api-sub', logger)
 const bus = await createEventBus({ publisher: redis, subscriber, logger })

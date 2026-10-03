@@ -1,5 +1,6 @@
 export * from './audit.ts'
 export * from './bus.ts'
 export * from './logger.ts'
+export * from './process.ts'
 export * from './redis.ts'
 export * from './settings-service.ts'
