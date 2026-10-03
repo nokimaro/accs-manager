@@ -6,7 +6,7 @@
 ## Разработка
 
 ```bash
-cp .env.example .env                 # заполнить APP_ENCRYPTION_KEY (команда в комментарии)
+cp .env.example .env                 # заполнить APP_ENCRYPTION_KEY и POSTGRES_PASSWORD (команды в комментариях), пароль — и в DATABASE_URL
 docker compose -f compose.yml -f compose.dev.yml up -d accs-postgres accs-redis
 pnpm install
 pnpm --filter @workspace/db db:migrate
@@ -26,5 +26,8 @@ docker compose exec accs-api node apps/api/src/cli.ts admin:create --login admin
 ```
 
 `POSTGRES_PASSWORD` попадает в строку подключения как есть — используйте только URL-безопасные символы (например, `openssl rand -hex 24`).
+
+`APP_ENCRYPTION_KEY` храните в резервной копии отдельно от дампов базы: секретные настройки (токены, api_hash, ключи)
+зашифрованы этим ключом, и без него они безвозвратно теряются — панель покажет их как «Не задан».
 
 Остальные параметры (Telegram, уведомления, прокси, лимиты) — в панели, раздел «Настройки», или `cli settings:set`.

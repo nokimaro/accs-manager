@@ -46,6 +46,7 @@ services:
   accs-migrate:
     <<: *api-image
     container_name: accs-migrate
+    init: true
     command: ["node", "packages/db/src/migrate-cli.ts"]
     environment:
       DATABASE_URL: *db-url
@@ -57,6 +58,8 @@ services:
   accs-api:
     <<: *api-image
     container_name: accs-api
+    # tini as PID 1: forwards signals and reaps zombies
+    init: true
     restart: unless-stopped
     environment:
       NODE_ENV: production
