@@ -27,7 +27,10 @@ const profile = (tgUserId: number): SessionProfile => ({ tgUserId, phone: '77001
 type FakePhoneClient = PhoneClient & { destroyed: boolean; loggedOut: boolean; cancelled: boolean; calls: string[] }
 
 /** Telegram as the test scripts it: the right code is 12345, the right cloud password «right» (if `twoFa`). */
-function scripted(tgUserId: number, opts: { twoFa?: boolean; sendCode?: () => Promise<SentCodeInfo | SessionProfile> } = {}) {
+function scripted(
+  tgUserId: number,
+  opts: { twoFa?: boolean; sendCode?: (signal?: AbortSignal) => Promise<SentCodeInfo | SessionProfile>; signInDelayMs?: number } = {},
+) {
   const made: FakePhoneClient[] = []
   const factory: PhoneClientFactory = () => {
     let expired = false
@@ -36,9 +39,9 @@ function scripted(tgUserId: number, opts: { twoFa?: boolean; sendCode?: () => Pr
       loggedOut: false,
       cancelled: false,
       calls: [],
-      sendCode: async (phone) => {
+      sendCode: async (phone, signal) => {
         client.calls.push(`sendCode ${phone}`)
-        return opts.sendCode ? opts.sendCode() : sent()
+        return opts.sendCode ? opts.sendCode(signal) : sent()
       },
       resendCode: async () => {
         client.calls.push('resendCode')
@@ -47,6 +50,8 @@ function scripted(tgUserId: number, opts: { twoFa?: boolean; sendCode?: () => Pr
       },
       signIn: async (_phone, hash, code) => {
         client.calls.push(`signIn ${hash} ${code}`)
+        // Telegram may finish authorizing even though the admin cancelled meanwhile
+        if (opts.signInDelayMs) await new Promise((r) => setTimeout(r, opts.signInDelayMs))
         if (code === '00000') {
           expired = true
           throw rpcError(400, 'PHONE_CODE_EXPIRED')
@@ -232,4 +237,36 @@ describe('phone login', () => {
       await w.deps.settings.update({ 'telegram.own.apiId': 123456 }, { adminId: null })
     }
   })
+
+  it('gives up a login whose Telegram call never answers, on timeout, destroying the client', async () => {
+    const loginId = randomUUID()
+    // like mtcute: an RPC that never gets an answer ends only through its abort signal
+    const hanging = (signal?: AbortSignal) =>
+      new Promise<SentCodeInfo>((_, reject) => signal?.addEventListener('abort', () => reject(signal.reason), { once: true }))
+    const { factory, made } = scripted(61009, { sendCode: hanging })
+    const { states, off } = await collect(loginId)
+    const run = createPhoneLogin(w.deps, factory, { timeoutMs: 80 }).run(start(loginId))
+    const outcome = await Promise.race([run.then(() => 'ended'), new Promise((r) => setTimeout(() => r('hung'), 2_000))])
+    expect(outcome).toBe('ended')
+    await vi.waitFor(() => expect(states.at(-1)).toMatchObject({ state: 'expired' }))
+    off()
+    expect(made[0]!.destroyed).toBe(true)
+  })
+
+  it('drops a session Telegram authorized after the admin cancelled', async () => {
+    const loginId = randomUUID()
+    const { factory, made } = scripted(61010, { signInDelayMs: 150 })
+    const { states, off, names } = await collect(loginId)
+    const run = createPhoneLogin(w.deps, factory).run(start(loginId))
+    await vi.waitFor(() => expect(names()).toContain('code_sent'))
+    await send(loginId, { type: 'code', code: '12345' })
+    await vi.waitFor(() => expect(made[0]!.calls.some((c) => c.startsWith('signIn'))).toBe(true))
+    await send(loginId, { type: 'cancel' })
+    await run
+    await vi.waitFor(() => expect(states.at(-1)).toMatchObject({ state: 'cancelled' }))
+    off()
+    expect(made[0]!.loggedOut).toBe(true)
+    expect(await w.t.db.select().from(accounts).where(eq(accounts.tgUserId, 61010))).toHaveLength(0)
+  })
 })
+

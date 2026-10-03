@@ -99,17 +99,24 @@ export function createPhoneLogin(deps: WorkerDeps, factory: PhoneClientFactory, 
         else inbox.push(message)
         wake?.()
       })
+      // the next message from the admin; a cancel or the timeout wins over anything still queued
       const next = async (): Promise<LoginControl> => {
-        while (inbox.length === 0) {
+        for (;;) {
           if (abort.signal.aborted) throw abort.signal.reason
+          const message = inbox.shift()
+          if (message) return message
           await new Promise<void>((resolve) => {
-            wake = resolve
-            abort.signal.addEventListener('abort', () => resolve(), { once: true })
+            const onAbort = () => resolve()
+            abort.signal.addEventListener('abort', onAbort, { once: true })
+            wake = () => {
+              abort.signal.removeEventListener('abort', onAbort)
+              resolve()
+            }
           })
           wake = null
         }
-        return inbox.shift()!
       }
+      const signal = abort.signal
 
       let client: PhoneClient | undefined
       let code: SentCodeInfo | undefined
@@ -121,7 +128,7 @@ export function createPhoneLogin(deps: WorkerDeps, factory: PhoneClientFactory, 
 
         let profile: SessionProfile | undefined
         let cloudPassword: string | null = null
-        const first = await phoneClient.sendCode(phone)
+        const first = await phoneClient.sendCode(phone, signal)
         if (isProfile(first)) profile = first
         else {
           code = first
@@ -137,11 +144,11 @@ export function createPhoneLogin(deps: WorkerDeps, factory: PhoneClientFactory, 
           const message = await next()
           if (message.type === 'resend') {
             if (code!.nextType === 'none') continue
-            code = await phoneClient.resendCode(phone, code!.phoneCodeHash)
+            code = await phoneClient.resendCode(phone, code!.phoneCodeHash, signal)
             await update(loginId, 'code_sent', codeInfo(code))
           } else if (message.type === 'code') {
             try {
-              profile = await phoneClient.signIn(phone, code!.phoneCodeHash, message.code)
+              profile = await phoneClient.signIn(phone, code!.phoneCodeHash, message.code, signal)
             } catch (err) {
               if (tl.RpcError.is(err, 'PHONE_CODE_INVALID')) await update(loginId, 'code_invalid', codeInfo(code!))
               else if (tl.RpcError.is(err, 'PHONE_CODE_EXPIRED')) await update(loginId, 'code_expired', codeInfo(code!))
@@ -153,13 +160,13 @@ export function createPhoneLogin(deps: WorkerDeps, factory: PhoneClientFactory, 
 
         // the cloud password
         if (!profile) {
-          const hint = await phoneClient.passwordHint().catch(() => null)
+          const hint = await phoneClient.passwordHint(signal).catch(() => null)
           await update(loginId, 'password_needed', hint ? { hint } : {})
           while (!profile) {
             const message = await next()
             if (message.type !== 'password') continue
             try {
-              profile = await phoneClient.checkPassword(message.password)
+              profile = await phoneClient.checkPassword(message.password, signal)
               cloudPassword = message.password
             } catch (err) {
               if (!tl.RpcError.is(err, 'PASSWORD_HASH_INVALID')) throw err
@@ -168,6 +175,11 @@ export function createPhoneLogin(deps: WorkerDeps, factory: PhoneClientFactory, 
           }
         }
 
+        if (signal.aborted) {
+          // Telegram authorized the session after the admin cancelled (or time ran out): no account, no stray device
+          await phoneClient.logOut().catch(() => {})
+          throw signal.reason
+        }
         const result = await kit.finish({ client: phoneClient, profile, source: 'phone', proxyId, adminId, cloudPassword, device })
         client = undefined
         if ('duplicateOf' in result) {

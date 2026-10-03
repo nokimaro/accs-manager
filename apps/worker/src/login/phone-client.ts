@@ -17,16 +17,19 @@ export interface SentCodeInfo {
   timeoutSec: number
 }
 
-/** A throwaway client for one phone-number login; its session is exported and handed to the account manager. */
+/**
+ * A throwaway client for one phone-number login; its session is exported and handed to the account manager.
+ * `signal` ends a call that Telegram never answers (mtcute itself waits and reconnects forever).
+ */
 export interface PhoneClient extends LoginClient {
   /** the profile when Telegram authorizes at once (a future-auth token), otherwise where the code went */
-  sendCode(phone: string): Promise<SentCodeInfo | SessionProfile>
-  resendCode(phone: string, phoneCodeHash: string): Promise<SentCodeInfo>
+  sendCode(phone: string, signal?: AbortSignal): Promise<SentCodeInfo | SessionProfile>
+  resendCode(phone: string, phoneCodeHash: string, signal?: AbortSignal): Promise<SentCodeInfo>
   /** throws SESSION_PASSWORD_NEEDED when the account has a cloud password */
-  signIn(phone: string, phoneCodeHash: string, code: string): Promise<SessionProfile>
-  checkPassword(password: string): Promise<SessionProfile>
+  signIn(phone: string, phoneCodeHash: string, code: string, signal?: AbortSignal): Promise<SessionProfile>
+  checkPassword(password: string, signal?: AbortSignal): Promise<SessionProfile>
   cancelCode(phone: string, phoneCodeHash: string): Promise<void>
-  passwordHint(): Promise<string | null>
+  passwordHint(signal?: AbortSignal): Promise<string | null>
 }
 
 export type PhoneClientFactory = (options: { apiId: number; apiHash: string; device: AccountDevice; proxy: ProxyEndpoint | null }) => PhoneClient
@@ -55,24 +58,24 @@ export const createMtcutePhoneClient: PhoneClientFactory = (options) => {
     timeoutSec: code.timeout,
   })
   return {
-    async sendCode(phone) {
-      const res = await client.sendCode({ phone })
+    async sendCode(phone, abortSignal) {
+      const res = await client.sendCode({ phone, abortSignal })
       return 'phoneCodeHash' in res ? info(res) : profileOf(res)
     },
-    async resendCode(phone, phoneCodeHash) {
-      return info(await client.resendCode({ phone, phoneCodeHash }))
+    async resendCode(phone, phoneCodeHash, abortSignal) {
+      return info(await client.resendCode({ phone, phoneCodeHash, abortSignal }))
     },
-    async signIn(phone, phoneCodeHash, code) {
-      return profileOf(await client.signIn({ phone, phoneCodeHash, phoneCode: code }))
+    async signIn(phone, phoneCodeHash, code, abortSignal) {
+      return profileOf(await client.signIn({ phone, phoneCodeHash, phoneCode: code, abortSignal }))
     },
-    async checkPassword(password) {
-      return profileOf(await client.checkPassword(password))
+    async checkPassword(password, abortSignal) {
+      return profileOf(await client.checkPassword({ password, abortSignal }))
     },
     async cancelCode(phone, phoneCodeHash) {
       await client.call({ _: 'auth.cancelCode', phoneNumber: phone, phoneCodeHash })
     },
-    async passwordHint() {
-      const pwd = await client.call({ _: 'account.getPassword' })
+    async passwordHint(abortSignal) {
+      const pwd = await client.call({ _: 'account.getPassword' }, { abortSignal })
       return pwd.hint ?? null
     },
     exportSession: () => client.exportSession(),
