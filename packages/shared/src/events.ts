@@ -1,0 +1,1 @@
+// Events types - placeholder
