@@ -1,0 +1,17 @@
+# secrets
+.env
+.env.*
+!.env.example
+
+# telegram session material — never commit
+tdata-samples/
+*.zip
+
+# deps & build
+node_modules/
+dist/
+*.tsbuildinfo
+coverage/
+
+# os / editor
+.DS_Store
