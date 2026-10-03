@@ -59,6 +59,20 @@
   `better-sqlite3` подгружается лениво и не нужен — нативных модулей в стеке нет.
 - proxy-store API: ответ `{status, list: {<id>: {...}}}`; только что купленные прокси
   отдаются с `ip: 0.0.0.0`, `port: 0`, пустыми логином и паролем — до выдачи провайдером.
+  Поля элемента: `id, ip, port, user, pass, type (http|socks), country, category, active,
+  date, date_end, unixtime, unixtime_end, order_id, autoprolong, comment`. В аккаунте
+  владельца есть и чужие для проекта прокси (`ru/vkontakte`, `nl`) — фильтр по стране и
+  категории обязателен.
+- **Прокси ↔ Telegram (спайк с прод-сервера, 2026-10-03):** через все 10 KZ-прокси
+  (5 http + 5 socks5, логин/пароль) mtcute 0.32.3 устанавливает MTProto-соединение без
+  аккаунта и вызывает `help.getNearestDc`; RTT после соединения 17–22 мс (первый вызов
+  с генерацией ключа — 1–1,8 с). Разницы http/socks нет — поддерживаются оба на равных.
+  Страну выходного IP Telegram видит по-разному: подсеть `194.53.188.x` → `KZ`,
+  `194.53.189.x` → `JP` (продаются как kz). Решение владельца: страну глазами Telegram
+  только показывать, на логику она не влияет. Напрямую с сервера Telegram видит `NL`.
+- **Заморозка аккаунта** (по исходникам Telegram Desktop 7.2.9): `help.getAppConfig` →
+  `freeze_since_date` (≠ 0 — заморожен), `freeze_until_date`, `freeze_appeal_url`;
+  ошибка RPC `FROZEN_METHOD_INVALID` — сигнал перечитать конфиг.
 
 ## 3. Архитектура
 
@@ -111,13 +125,13 @@ packages/
 | `settings` | `key` (PK), `value` jsonb (для секретов — `{enc: "v1:…"}`), `updated_at`, `updated_by?`. Хранятся только значения, отличные от умолчаний |
 | `accounts` | `id`, `tg_user_id` (unique), `phone`, `username`, `first_name`, `last_name`, `is_premium`, `dc_id`, `label`, `note`, `source` (`tdata`/`qr`), `client_profile` (`desktop`/`own`), `device` jsonb (model, system, app version, lang — фиксируются при добавлении), `connection_mode` (`proxy`/`direct`), `proxy_id?` (FK, unique), `status`, `status_reason`, `status_changed_at`, `last_ok_at`, `created_at`, `updated_at` |
 | `account_auth` | `account_id` (PK/FK), `dc_id`, `auth_key_enc` |
-| `proxies` | `id`, `source` (`manual`/`proxy_store`), `external_id?`, `type` (`socks5`/`http`), `host`, `port`, `username?`, `password_enc?`, `tag?`, `status`, `last_check_at`, `last_ok_at`, `latency_ms`, `last_error`, `fail_streak`, `expires_at?`, `provider_meta` jsonb, `disabled_at?`, `created_at`, `updated_at`. Unique: (`type`,`host`,`port`,`username`); unique (`source`,`external_id`) |
+| `proxies` | `id`, `source` (`manual`/`proxy_store`), `external_id?`, `type` (`socks5`/`http`), `host`, `port`, `username?`, `password_enc?`, `tag?`, `status`, `last_check_at`, `last_ok_at`, `latency_ms`, `tg_country?` (страна выходного IP глазами Telegram, из `help.getNearestDc`), `last_error`, `fail_streak`, `expires_at?`, `provider_meta` jsonb, `disabled_at?`, `created_at`, `updated_at`. Unique: (`type`,`host`,`port`,`username`); unique (`source`,`external_id`) |
 | `code_messages` | `id`, `account_id`, `tg_message_id`, `date`, `text`, `code?`, `notified_at?`, `created_at`. Unique (`account_id`,`tg_message_id`) |
 | `import_batches` | `id`, `admin_id`, `filename`, `status`, `created_at`, `expires_at` |
 | `import_items` | `id`, `batch_id`, `path_in_archive`, `account_index`, `tg_user_id`, `dc_id`, `auth_key_enc`, `duplicate_of?`, `decision` (`pending`/`imported`/`skipped`), `error?` |
 
-Плюс служебные таблицы `@mtcute/postgres` (кеш пиров, состояние апдейтов), разделённые
-по `account: <accounts.id>`.
+Плюс служебные таблицы `@mtcute/postgres` (кеш пиров, состояние апдейтов) в отдельной
+схеме `mtcute`, разделённые по `account: <accounts.id>`; drizzle их не трогает.
 
 **Не в Postgres:** состояние активного QR-входа (Redis, TTL); список активных сессий
 аккаунта (запрашивается у Telegram на лету через `account.getAuthorizations`).
@@ -133,10 +147,11 @@ packages/
   для будущей ротации.
 - Шифруются: `account_auth.auth_key_enc`, `import_items.auth_key_enc`,
   `proxies.password_enc`, значения настроек типа `secret`.
-- `@mtcute/postgres` хранит auth key открытым текстом. Требование: ключ в его таблицах
-  **не хранится в открытом виде**. Способ (подмена репозитория auth keys в хранилище mtcute
-  на шифрующую обёртку над `account_auth`, либо собственный storage-провайдер) выбирается
-  и проверяется на этапе плана.
+- `@mtcute/postgres` хранит auth key открытым текстом, поэтому провайдер хранилища
+  собирается из частей: `driver`, `kv`, `peers`, `refMessages` — от `PostgresStorage`, а
+  `authKeys` — собственная реализация `IAuthKeysRepository`, которая шифрует ключ
+  `APP_ENCRYPTION_KEY` и хранит его в `account_auth` (временные PFS-ключи не используются).
+  Открытым текстом ключ в БД не появляется.
 
 ## 5. Воркер и жизненный цикл аккаунта
 
@@ -164,7 +179,7 @@ pending_check ──проверка──► active ◄──────► pa
                          proxy_down
 active ──► unauthorized   AUTH_KEY_UNREGISTERED / SESSION_REVOKED / AUTH_KEY_DUPLICATED (конечный)
 active ──► banned         USER_DEACTIVATED_BAN (конечный)
-active ──► frozen         заморозка по appConfig; клиент остаётся онлайн, коды принимаются
+active ──► frozen         help.getAppConfig.freeze_since_date ≠ 0 (перепроверка на FROZEN_METHOD_INVALID); клиент остаётся онлайн, коды принимаются
 active ──► error          неожиданная ошибка → повтор с экспоненциальной задержкой
 ```
 
@@ -227,7 +242,9 @@ active ──► error          неожиданная ошибка → повт
 
 ### Проверка здоровья (для всех источников)
 
-- SOCKS5-рукопожатие / HTTP `CONNECT` до адреса Telegram DC, замер задержки.
+- MTProto-подключение через прокси без аккаунта (временный клиент mtcute) и вызов
+  `help.getNearestDc`: замер задержки и страна выходного IP глазами Telegram (`tg_country`,
+  только для показа).
 - По расписанию (`proxy.checkInterval`), сразу после добавления и внепланово при потере
   соединения клиентом.
 - 1 неудача → `failing` (учащённые перепроверки); `proxy.failThreshold` подряд → `dead` →
@@ -466,13 +483,14 @@ settings.get('worker.connectConcurrency') // number
 - **Правило:** без нативных зависимостей там, где есть чистый JS/WASM; при проблемах
   с образом — менять базу, а не архитектуру.
 - `compose.yml` (все сервисы, контейнеры, тома и сеть — с префиксом `accs-`:
-  `accs-postgres`, `accs-redis`, `accs-migrate`, `accs-api`, `accs-pgdata`, `accs-redisdata`, `accs-net`):
+  `accs-postgres`, `accs-redis`, `accs-migrate`, `accs-api`, `accs-worker`, `accs-pgdata`, `accs-redisdata`, `accs-net`):
   - `postgres:18-trixie` — volume на `/var/lib/postgresql` (с v18 образ хранит `PGDATA`
     в версионированном подкаталоге);
   - `redis:8-trixie` — `appendonly yes`, `maxmemory-policy noeviction` (требование BullMQ);
   - `migrate` — одноразовый, миграции Drizzle; `api`/`worker` зависят от
     `service_completed_successfully`;
-  - `api` — порт `3000`; `worker` — без портов, `stop_grace_period: 30s`;
+  - `api` — порт `3000`; `worker` (`accs-worker`, тот же образ, `node apps/worker/src/main.ts`) —
+    без портов, `stop_grace_period: 30s`; единственность — `pg_advisory_lock`;
   - Postgres и Redis наружу не публикуются.
 - `compose.dev.yml` — порты Postgres/Redis для локальной разработки (настраиваемые:
   `DEV_PG_PORT`/`DEV_REDIS_PORT`); приложения в dev — `pnpm dev`, Vite проксирует `/api` на api.
@@ -527,12 +545,15 @@ settings.get('worker.connectConcurrency') // number
 
 ## 13. Риски и открытые вопросы
 
+Реализация оставшегося (воркер, прокси, аккаунты, коды, уведомления, QR) — **одним планом 2**
+(решение владельца 2026-10-03; изначально делилось на планы 2 и 3).
+
 | Риск | Что делаем |
 |---|---|
-| tdata, записанная самим TDesktop 7.x, не проверена (образец — v3.4.0) | `ignoreVersion: true`; прогнать спайк на «живой» tdata 7.x, как только появится. Запасной путь — Python-конвертер (opentele2/TGConvertor) как отдельная утилита. |
-| Встраивание шифрования ключа в хранилище mtcute | Выбрать и проверить подход на этапе плана (§4). |
-| HTTP- против SOCKS5-прокси proxy-store | Владелец заказывает 5 http + 5 socks; после выдачи — спайк: рукопожатие с Telegram через каждый. |
-| Определение «заморозки» аккаунта | Уточнить признаки (appConfig / ошибки методов) на этапе плана. |
+| tdata, записанная самим TDesktop 7.x, не проверена (образец — v3.4.0) | `ignoreVersion: true`. Живая проверка — на архиве владельца из `tdata-samples/` (формат 3.4.0) в конце плана 2; 7.x — как только появится такой архив. Запасной путь — Python-конвертер (opentele2/TGConvertor) как отдельная утилита. |
+| Встраивание шифрования ключа в хранилище mtcute | **Решено:** свой `IAuthKeysRepository` поверх `account_auth` + остальное от `@mtcute/postgres` (§4). |
+| HTTP- против SOCKS5-прокси proxy-store | **Решено спайком:** оба типа работают одинаково (§2). Новый риск: геобаза Telegram видит часть «kz»-прокси как JP — показываем `tg_country` в таблице. |
+| Определение «заморозки» аккаунта | **Решено:** как в Telegram Desktop — `help.getAppConfig.freeze_since_date`, перепроверка на `FROZEN_METHOD_INVALID` (§2, §5). |
 | `AUTH_KEY_DUPLICATED` при деплое | advisory lock + stop-first деплой воркера. |
 | Использование api_id Telegram Desktop | Осознанный выбор владельца; значения — в настройках, переключаемы. |
 | Смена api_id в настройках при живых сессиях | `effect: new_connections` — применяется только к новым подключениям; существующие клиенты не переподключаются автоматически. |
