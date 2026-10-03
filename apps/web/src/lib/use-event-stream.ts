@@ -21,7 +21,13 @@ export function useEventStream(onEvent: (event: AppEvent) => void, maxBackoffMs 
     let disposed = false
 
     const handle = (ev: MessageEvent<string>) => {
-      const parsed = appEventSchema.safeParse(JSON.parse(ev.data))
+      let data: unknown
+      try {
+        data = JSON.parse(ev.data)
+      } catch {
+        return
+      }
+      const parsed = appEventSchema.safeParse(data)
       if (parsed.success) onEventRef.current(parsed.data)
     }
 

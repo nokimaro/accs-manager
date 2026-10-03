@@ -5,9 +5,10 @@ import { createRouter, RouterProvider } from '@tanstack/react-router'
 import '@workspace/ui/globals.css'
 import { ThemeProvider } from '@/components/theme-provider.tsx'
 import { createQueryClient } from '@/lib/query-client'
+import { handleUnauthorized } from '@/lib/session'
 import { routeTree } from './routeTree.gen'
 
-const queryClient = createQueryClient()
+const queryClient = createQueryClient(() => handleUnauthorized(queryClient, router))
 
 const router = createRouter({
   routeTree,

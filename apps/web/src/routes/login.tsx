@@ -15,7 +15,7 @@ import { authKeys, meQueryOptions } from '@/lib/auth'
 
 const loginSearch = z.object({
   // app-relative only — no open redirects
-  redirect: z.string().regex(/^\/(?!\/)/).optional().catch(undefined),
+  redirect: z.string().regex(/^\/(?![/\\])/).optional().catch(undefined),
 })
 
 export const Route = createFileRoute('/login')({

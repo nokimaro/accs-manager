@@ -18,6 +18,8 @@ export function ChangePasswordDialog({ open, onOpenChange }: { open: boolean; on
   const mutation = useMutation({
     mutationFn: () => api('/auth/password', { method: 'POST', json: { currentPassword, newPassword } }),
     onSuccess: async () => {
+      setCurrentPassword('')
+      setNewPassword('')
       onOpenChange(false)
       toast.add({ title: 'Пароль изменён', description: 'Войдите с новым паролем.' })
       queryClient.clear()
@@ -25,10 +27,19 @@ export function ChangePasswordDialog({ open, onOpenChange }: { open: boolean; on
       await router.invalidate()
     },
   })
+  const handleOpenChange = (next: boolean) => {
+    // never keep typed passwords or a stale error around after the dialog closes
+    if (!next) {
+      setCurrentPassword('')
+      setNewPassword('')
+      mutation.reset()
+    }
+    onOpenChange(next)
+  }
   const fields = mutation.error instanceof ApiError ? mutation.error.fields : {}
 
   return (
-    <Dialog open={open} onOpenChange={onOpenChange}>
+    <Dialog open={open} onOpenChange={handleOpenChange}>
       <DialogContent>
         <form
           className="flex flex-col gap-6"
