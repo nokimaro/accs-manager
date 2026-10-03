@@ -8,7 +8,7 @@ import { Hono } from 'hono'
 import { deleteCookie, setCookie } from 'hono/cookie'
 import type { AppEnv } from '../deps.ts'
 import { hashPassword, verifyPassword } from '../lib/password.ts'
-import { checkLimit, clearFailures, recordFailure } from '../lib/rate-limit.ts'
+import { clearAttempts, refundAttempt, reserveAttempt } from '../lib/rate-limit.ts'
 import { createSession, deleteSession, SESSION_COOKIE } from '../lib/sessions.ts'
 import { requireAuth } from '../middleware/auth.ts'
 import { validationHook } from './validation.ts'
@@ -27,8 +27,9 @@ export const authRoutes = new Hono<AppEnv>()
     const windowMs = parseDuration(settings.get('security.loginWindow'))
     const ipKey = `rl:login:ip:${c.get('clientIp')}`
     const userKey = `rl:login:user:${login}`
-    const [byIp, byUser] = await Promise.all([checkLimit(redis, ipKey, limit), checkLimit(redis, userKey, limit)])
-    if (byIp.limited || byUser.limited) {
+    // reserve the attempt atomically before the (slow) password check, so a parallel burst cannot bypass the limit
+    const [byIp, byUser] = await Promise.all([reserveAttempt(redis, ipKey, windowMs), reserveAttempt(redis, userKey, windowMs)])
+    if (byIp.count > limit || byUser.count > limit) {
       c.header('Retry-After', String(Math.max(byIp.retryAfterSec, byUser.retryAfterSec)))
       return c.json({ error: 'rate_limited', message: 'Слишком много попыток входа' }, 429)
     }
@@ -36,11 +37,11 @@ export const authRoutes = new Hono<AppEnv>()
     const admin = await findAdminByLogin(db, login)
     const ok = await verifyPassword(password, admin?.passwordHash ?? DUMMY_HASH)
     if (!admin || !ok || admin.disabledAt) {
-      await Promise.all([recordFailure(redis, ipKey, windowMs), recordFailure(redis, userKey, windowMs)])
       return c.json({ error: 'invalid_credentials', message: 'Неверный логин или пароль' }, 401)
     }
 
-    await clearFailures(redis, userKey)
+    // a successful login does not count against anyone's budget
+    await Promise.all([clearAttempts(redis, userKey), refundAttempt(redis, ipKey)])
     const ttlMs = parseDuration(settings.get('security.sessionTtl'))
     const session = await createSession(db, { adminId: admin.id, ttlMs, ip: c.get('clientIp'), userAgent: c.req.header('user-agent') ?? null })
     await db.update(admins).set({ lastLoginAt: new Date() }).where(eq(admins.id, admin.id))
@@ -64,13 +65,20 @@ export const authRoutes = new Hono<AppEnv>()
   .get('/auth/me', requireAuth, (c) => c.json(c.get('admin') satisfies MeResponse | null))
   .post('/auth/password', requireAuth, zValidator('json', changePasswordInput, validationHook), async (c) => {
     c.set('audit', { action: 'auth.password.change' })
-    const { db } = c.get('deps')
+    const { db, redis, settings } = c.get('deps')
     const me = c.get('admin')!
     const { currentPassword, newPassword } = c.req.valid('json')
+    const key = `rl:password:admin:${me.id}`
+    const attempt = await reserveAttempt(redis, key, parseDuration(settings.get('security.loginWindow')))
+    if (attempt.count > settings.get('security.loginMaxAttempts')) {
+      c.header('Retry-After', String(attempt.retryAfterSec))
+      return c.json({ error: 'rate_limited', message: 'Слишком много попыток' }, 429)
+    }
     const row = await findAdminByLogin(db, me.login)
     if (!row || !(await verifyPassword(currentPassword, row.passwordHash))) {
       return c.json({ error: 'validation', fields: { currentPassword: 'Неверный текущий пароль' } }, 400)
     }
+    await clearAttempts(redis, key)
     await setAdminPassword(db, me.id, newPassword)
     deleteCookie(c, SESSION_COOKIE, { path: '/' })
     return c.body(null, 204)

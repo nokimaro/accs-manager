@@ -1,6 +1,6 @@
 import { admins, type Db } from '@workspace/db'
 import type { AdminDto } from '@workspace/shared/api'
-import { and, asc, count, eq, isNull, ne } from 'drizzle-orm'
+import { and, asc, count, eq, isNull, ne, sql } from 'drizzle-orm'
 import { hashPassword } from '../lib/password.ts'
 import { deleteAdminSessions } from '../lib/sessions.ts'
 
@@ -40,17 +40,21 @@ export async function createAdmin(db: Db, input: { login: string; password: stri
   return toAdminDto(row)
 }
 
-/** Revokes all sessions of the admin. */
+/** Revokes all sessions of the admin, atomically with the password change. */
 export async function setAdminPassword(db: Db, adminId: string, password: string): Promise<void> {
   const passwordHash = await hashPassword(password)
-  const [row] = await db.update(admins).set({ passwordHash }).where(eq(admins.id, adminId)).returning({ id: admins.id })
-  if (!row) throw new AdminError('not_found')
-  await deleteAdminSessions(db, adminId)
+  await db.transaction(async (tx) => {
+    const [row] = await tx.update(admins).set({ passwordHash }).where(eq(admins.id, adminId)).returning({ id: admins.id })
+    if (!row) throw new AdminError('not_found')
+    await deleteAdminSessions(tx as unknown as Db, adminId)
+  })
 }
 
 /** Refuses to disable the last active admin; revokes all sessions of the disabled one. */
 export async function disableAdmin(db: Db, adminId: string): Promise<AdminDto> {
   return db.transaction(async (tx) => {
+    // serialize disables: two concurrent disables must not both pass the last-admin check (write skew)
+    await tx.execute(sql`select pg_advisory_xact_lock(hashtext('accs:admins:disable'))`)
     const [target] = await tx.select().from(admins).where(eq(admins.id, adminId)).for('update')
     if (!target) throw new AdminError('not_found')
     if (target.disabledAt) return toAdminDto(target)

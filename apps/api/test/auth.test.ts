@@ -98,4 +98,35 @@ describe('auth', () => {
     expect((await send(ta.app, '/api/auth/logout', { method: 'POST', cookie, origin: 'https://evil.test' })).status).toBe(403)
     expect((await send(ta.app, '/api/auth/me', { cookie, origin: null })).status).toBe(200)
   })
+
+  it('does not let a parallel burst bypass the limit', async () => {
+    await ta.deps.settings.update({ 'security.loginMaxAttempts': 3 }, { adminId: null })
+    try {
+      const login = uniqueLogin()
+      const statuses = await Promise.all(
+        Array.from({ length: 6 }, (_, i) =>
+          send(ta.app, '/api/auth/login', { body: { login, password: 'bad password!' }, ip: `10.7.0.${i}` }).then((r) => r.status),
+        ),
+      )
+      expect(statuses.filter((s) => s === 401)).toHaveLength(3)
+      expect(statuses.filter((s) => s === 429)).toHaveLength(3)
+    } finally {
+      await ta.deps.settings.update({ 'security.loginMaxAttempts': null }, { adminId: null })
+    }
+  })
+
+  it('throttles current-password guesses on /auth/password', async () => {
+    await ta.deps.settings.update({ 'security.loginMaxAttempts': 3 }, { adminId: null })
+    try {
+      const { cookie } = await loginAs(ta)
+      const statuses: number[] = []
+      for (let i = 0; i < 4; i++) {
+        const res = await send(ta.app, '/api/auth/password', { cookie, body: { currentPassword: 'wrong guess', newPassword: 'another long secret' } })
+        statuses.push(res.status)
+      }
+      expect(statuses).toEqual([400, 400, 400, 429])
+    } finally {
+      await ta.deps.settings.update({ 'security.loginMaxAttempts': null }, { adminId: null })
+    }
+  })
 })
