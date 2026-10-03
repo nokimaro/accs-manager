@@ -187,3 +187,18 @@ export type ImportProxiesPreview = z.output<typeof importProxiesPreview>
 
 export const importProxiesResult = z.object({ created: z.number(), skipped: z.number() })
 export type ImportProxiesResult = z.output<typeof importProxiesResult>
+
+// ---- proxy-store sync status (written by the worker, read by the api) ----
+
+export const PROXY_STORE_STATUS_KEY = 'accs:proxy-store:last-sync'
+
+export const proxyStoreSyncStatus = z.object({
+  at: z.string(),
+  ok: z.boolean(),
+  error: z.string().optional(),
+  created: z.number(),
+  updated: z.number(),
+  expired: z.number(),
+  skipped: z.number(),
+})
+export type ProxyStoreSyncStatus = z.output<typeof proxyStoreSyncStatus>

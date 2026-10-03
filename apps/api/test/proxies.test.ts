@@ -100,6 +100,17 @@ describe('proxies api', () => {
     expect((await send(ta.app, `/api/proxies/${loose!.id}`, { cookie, method: 'DELETE' })).status).toBe(404)
   })
 
+  it('shows the last proxy-store sync written by the worker', async () => {
+    expect(await (await send(ta.app, '/api/proxies/sync-status', { cookie })).json()).toEqual({ status: null })
+    const status = { at: '2026-10-03T10:00:00.000Z', ok: false, error: 'proxy-store: bad key', created: 0, updated: 0, expired: 0, skipped: 0 }
+    await ta.deps.redis.set('accs:proxy-store:last-sync', JSON.stringify(status))
+    try {
+      expect(await (await send(ta.app, '/api/proxies/sync-status', { cookie })).json()).toEqual({ status })
+    } finally {
+      await ta.deps.redis.del('accs:proxy-store:last-sync')
+    }
+  })
+
   it('asks the worker to check one proxy or to sync proxy-store', async () => {
     const [p] = await ta.t.db.insert(proxies).values({ source: 'manual', type: 'http', host: '10.2.2.2', port: 80 }).returning()
     ta.commands.sent = []

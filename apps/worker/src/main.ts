@@ -6,6 +6,7 @@ import type { WorkerDeps } from './deps.ts'
 import { acquireSingletonLock } from './lock.ts'
 import { createMtcuteProxyChecker } from './proxies/checker.ts'
 import { createProxyHealth } from './proxies/health.ts'
+import { syncProxyStore } from './proxies/proxy-store.ts'
 import { createWorkerRuntime } from './runtime.ts'
 
 const env = loadEnv()
@@ -37,10 +38,14 @@ const proxyHealth = createProxyHealth(deps, proxyChecker)
 const runtime = createWorkerRuntime(deps, {
   commands: {
     'proxy.check': async ({ proxyId }) => proxyHealth.checkById(proxyId),
+    'proxy.sync': async () => syncProxyStore(deps, fetch),
   },
   maintenance: {
     'proxies.checkDue': async () => {
       await proxyHealth.checkDue()
+    },
+    'proxies.sync': async () => {
+      await syncProxyStore(deps, fetch)
     },
   },
 })

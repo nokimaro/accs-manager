@@ -1,5 +1,5 @@
 import { zValidator } from '@hono/zod-validator'
-import { createProxyInput, importProxiesInput, updateProxyInput } from '@workspace/shared/proxies'
+import { createProxyInput, importProxiesInput, PROXY_STORE_STATUS_KEY, proxyStoreSyncStatus, updateProxyInput } from '@workspace/shared/proxies'
 import { Hono } from 'hono'
 import { z } from 'zod'
 import type { AppEnv } from '../deps.ts'
@@ -11,6 +11,12 @@ const idParam = z.object({ id: z.uuid() })
 
 export const proxyRoutes = new Hono<AppEnv>()
   .get('/proxies', async (c) => c.json({ items: await listProxies(c.get('deps').db) }))
+  /** last proxy-store sync (null until the worker has run one) */
+  .get('/proxies/sync-status', async (c) => {
+    const raw = await c.get('deps').redis.get(PROXY_STORE_STATUS_KEY)
+    const parsed = raw ? proxyStoreSyncStatus.safeParse(JSON.parse(raw)) : null
+    return c.json({ status: parsed?.success ? parsed.data : null })
+  })
   .post('/proxies', audited('proxy.create'), zValidator('json', createProxyInput, validationHook), async (c) => {
     const { db, cipher, commands, bus } = c.get('deps')
     const proxy = await createProxy(db, cipher, c.req.valid('json'))
