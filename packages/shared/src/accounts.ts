@@ -1,0 +1,176 @@
+import { z } from 'zod'
+import { PROXY_STATUSES, PROXY_TYPES } from './proxies.ts'
+
+export const ACCOUNT_STATUSES = ['pending_check', 'active', 'paused', 'proxy_down', 'unauthorized', 'banned', 'frozen', 'error'] as const
+export type AccountStatus = (typeof ACCOUNT_STATUSES)[number]
+
+export const accountStatusLabels: Record<AccountStatus, string> = {
+  pending_check: 'проверка',
+  active: 'активен',
+  paused: 'на паузе',
+  proxy_down: 'прокси недоступен',
+  unauthorized: 'сессия отозвана',
+  banned: 'забанен',
+  frozen: 'заморожен',
+  error: 'ошибка',
+}
+
+/** Statuses in which the worker keeps (or tries to keep) a live client. */
+export const RUNNING_STATUSES: readonly AccountStatus[] = ['pending_check', 'active', 'frozen', 'error']
+/** Terminal statuses: the session is gone, only deletion makes sense. */
+export const FINAL_STATUSES: readonly AccountStatus[] = ['unauthorized', 'banned']
+
+export const ACCOUNT_SOURCES = ['tdata', 'qr'] as const
+export const CLIENT_PROFILES = ['desktop', 'own'] as const
+export const CONNECTION_MODES = ['proxy', 'direct'] as const
+
+/** Codes are read only from this official service account (Telegram Gateway). */
+export const CODE_SOURCE_USERNAME = 'VerificationCodes'
+
+export const accountDeviceDto = z.object({ deviceModel: z.string(), systemVersion: z.string(), appVersion: z.string(), langCode: z.string() })
+
+export const accountProxyRef = z.object({
+  id: z.string(),
+  type: z.enum(PROXY_TYPES),
+  host: z.string(),
+  port: z.number(),
+  status: z.enum(PROXY_STATUSES),
+  tgCountry: z.string().nullable(),
+})
+
+export const accountDto = z.object({
+  id: z.string(),
+  tgUserId: z.number(),
+  phone: z.string().nullable(),
+  username: z.string().nullable(),
+  firstName: z.string().nullable(),
+  lastName: z.string().nullable(),
+  isPremium: z.boolean(),
+  dcId: z.number().nullable(),
+  label: z.string().nullable(),
+  note: z.string().nullable(),
+  source: z.enum(ACCOUNT_SOURCES),
+  clientProfile: z.enum(CLIENT_PROFILES),
+  device: accountDeviceDto,
+  connectionMode: z.enum(CONNECTION_MODES),
+  proxy: accountProxyRef.nullable(),
+  status: z.enum(ACCOUNT_STATUSES),
+  statusReason: z.string().nullable(),
+  statusChangedAt: z.string(),
+  lastOkAt: z.string().nullable(),
+  frozenUntil: z.string().nullable(),
+  lastCodeAt: z.string().nullable(),
+  createdAt: z.string(),
+})
+export type AccountDto = z.output<typeof accountDto>
+
+export const updateAccountInput = z.object({
+  label: z.string().trim().max(64).nullable().optional(),
+  note: z.string().trim().max(2000).nullable().optional(),
+})
+export type UpdateAccountInput = z.output<typeof updateAccountInput>
+
+/** `proxyId: null` = connect directly (only by an explicit decision). */
+export const setAccountProxyInput = z.object({ proxyId: z.string().uuid().nullable() })
+export type SetAccountProxyInput = z.output<typeof setAccountProxyInput>
+
+export const deleteAccountQuery = z.object({ logout: z.stringbool().default(false) })
+
+/** One active session of an account (account.getAuthorizations). */
+export const accountSessionDto = z.object({
+  hash: z.string(),
+  current: z.boolean(),
+  official: z.boolean(),
+  appName: z.string(),
+  appVersion: z.string(),
+  deviceModel: z.string(),
+  platform: z.string(),
+  systemVersion: z.string(),
+  ip: z.string(),
+  country: z.string(),
+  region: z.string(),
+  createdAt: z.string(),
+  activeAt: z.string(),
+})
+export type AccountSessionDto = z.output<typeof accountSessionDto>
+
+// ---- tdata import ----
+
+export const importItemDto = z.object({
+  id: z.string(),
+  pathInArchive: z.string(),
+  accountIndex: z.number(),
+  tgUserId: z.number(),
+  dcId: z.number(),
+  duplicateOf: z.object({ id: z.string(), label: z.string().nullable(), phone: z.string().nullable() }).nullable(),
+  decision: z.enum(['pending', 'imported', 'skipped']),
+  accountId: z.string().nullable(),
+})
+export type ImportItemDto = z.output<typeof importItemDto>
+
+export const importBatchDto = z.object({
+  id: z.string(),
+  filename: z.string(),
+  status: z.enum(['ready', 'confirmed']),
+  createdAt: z.string(),
+  expiresAt: z.string(),
+  items: z.array(importItemDto),
+})
+export type ImportBatchDto = z.output<typeof importBatchDto>
+
+export const confirmImportInput = z.object({
+  items: z
+    .array(
+      z.discriminatedUnion('decision', [
+        z.object({ id: z.string().uuid(), decision: z.literal('proxy'), proxyId: z.string().uuid() }),
+        z.object({ id: z.string().uuid(), decision: z.literal('auto') }),
+        z.object({ id: z.string().uuid(), decision: z.literal('direct') }),
+        z.object({ id: z.string().uuid(), decision: z.literal('skip') }),
+      ]),
+    )
+    .min(1),
+})
+export type ConfirmImportInput = z.output<typeof confirmImportInput>
+
+export const confirmImportResult = z.object({ created: z.number(), skipped: z.number() })
+export type ConfirmImportResult = z.output<typeof confirmImportResult>
+
+// ---- codes ----
+
+export const codeDto = z.object({
+  id: z.number(),
+  accountId: z.string(),
+  account: z.object({ label: z.string().nullable(), phone: z.string().nullable(), username: z.string().nullable() }),
+  tgMessageId: z.number(),
+  date: z.string(),
+  text: z.string(),
+  code: z.string().nullable(),
+  notifiedAt: z.string().nullable(),
+})
+export type CodeDto = z.output<typeof codeDto>
+
+export const codesQuery = z.object({
+  accountId: z.string().uuid().optional(),
+  /** id of the oldest code already shown — returns older ones */
+  before: z.coerce.number().int().positive().optional(),
+  limit: z.coerce.number().int().min(1).max(200).default(50),
+})
+export type CodesQuery = z.output<typeof codesQuery>
+
+// ---- QR login ----
+
+export const startQrInput = z.object({ proxyId: z.string().uuid().nullable() })
+export type StartQrInput = z.output<typeof startQrInput>
+
+export const qrPasswordInput = z.object({ password: z.string().min(1).max(256) })
+
+export const QR_STATES = ['waiting', 'scanned', 'password_needed', 'password_invalid', 'done', 'failed', 'expired', 'cancelled'] as const
+export type QrState = (typeof QR_STATES)[number]
+
+/** Shown under an account label when there is no label: phone, @username or Telegram id. */
+export function accountTitle(a: { label?: string | null; phone?: string | null; username?: string | null; tgUserId?: number | null }): string {
+  if (a.label) return a.label
+  if (a.phone) return `+${a.phone.replace(/^\+/, '')}`
+  if (a.username) return `@${a.username}`
+  return a.tgUserId ? `id ${a.tgUserId}` : 'аккаунт'
+}

@@ -9,7 +9,10 @@
     "./crypto": "./src/crypto.ts",
     "./api": "./src/api.ts",
     "./events": "./src/events.ts",
-    "./settings": "./src/settings/index.ts"
+    "./settings": "./src/settings/index.ts",
+    "./proxies": "./src/proxies.ts",
+    "./accounts": "./src/accounts.ts",
+    "./commands": "./src/commands.ts"
   },
   "scripts": {
     "typecheck": "tsc -p tsconfig.json",
