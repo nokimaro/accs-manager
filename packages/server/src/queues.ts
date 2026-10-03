@@ -7,8 +7,13 @@ export { COMMANDS_QUEUE }
 /** All queues of the project live under this Redis key prefix. */
 export const QUEUE_PREFIX = 'accs'
 
-/** Command jobs keep nothing after they finish: payloads may name accounts and sessions. */
-const COMMAND_JOB_OPTIONS = { removeOnComplete: true, removeOnFail: true, attempts: 1 } as const
+/**
+ * Finished command jobs stay a minute, no more: a worker that answers before the caller started listening is read
+ * back from the job (removed at once, it gave «Missing key for job» instead of the answer). Payloads name accounts
+ * and sessions and carry secrets only as ciphertext (…Enc).
+ */
+const KEEP_FINISHED = { age: 60 } as const
+const COMMAND_JOB_OPTIONS = { removeOnComplete: KEEP_FINISHED, removeOnFail: KEEP_FINISHED, attempts: 1 } as const
 
 export class WorkerTimeoutError extends Error {
   constructor(type: string) {

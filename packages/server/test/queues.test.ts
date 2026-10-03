@@ -1,6 +1,6 @@
 import { randomUUID } from 'node:crypto'
 import type {} from '@workspace/db/testing'
-import { Worker } from 'bullmq'
+import { Queue, Worker } from 'bullmq'
 import { afterAll, describe, expect, inject, it } from 'vitest'
 import { COMMANDS_QUEUE, createCommandClient, WorkerTimeoutError } from '../src/queues.ts'
 import { createRedis } from '../src/redis.ts'
@@ -25,6 +25,21 @@ describe('worker commands', () => {
       await expect(client.call({ type: 'account.sessions', accountId: 'a' })).resolves.toEqual([{ hash: '1', current: true }])
     } finally {
       await worker.close()
+      await client.close()
+    }
+  })
+
+  it('keeps a finished command a short while, so its answer is readable even when the worker beat the listener', async () => {
+    const client = createCommandClient(conn, prefix)
+    const worker = new Worker(COMMANDS_QUEUE, async () => 'done', { connection: conn.duplicate(), prefix })
+    const queue = new Queue(COMMANDS_QUEUE, { connection: conn.duplicate(), prefix })
+    try {
+      await expect(client.call({ type: 'account.sessions', accountId: 'kept' })).resolves.toBe('done')
+      const finished = await queue.getJobs(['completed'])
+      expect(finished.some((j) => (j.data as { accountId?: string }).accountId === 'kept')).toBe(true)
+    } finally {
+      await worker.close()
+      await queue.close()
       await client.close()
     }
   })
