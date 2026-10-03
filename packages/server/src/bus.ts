@@ -2,7 +2,7 @@ import { appEventSchema, EVENTS_CHANNEL, type AppEvent } from '@workspace/shared
 import type { Redis } from 'ioredis'
 import type { Logger } from './logger.ts'
 
-export type EventHandler = (event: AppEvent) => void
+export type EventHandler = (event: AppEvent) => void | Promise<void>
 
 export interface EventBus {
   publish(event: AppEvent): Promise<void>
@@ -40,7 +40,10 @@ export async function createEventBus(options: {
     }
     for (const handler of handlers) {
       try {
-        handler(event)
+        const result = handler(event)
+        if (result instanceof Promise) {
+          result.catch((err: unknown) => options.logger?.error({ err, type: event.type }, 'bus: handler failed'))
+        }
       } catch (err) {
         options.logger?.error({ err, type: event.type }, 'bus: handler failed')
       }

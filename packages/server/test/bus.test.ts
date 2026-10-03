@@ -29,4 +29,24 @@ describe('event bus', () => {
     await a.close()
     await b.close()
   })
+
+  it('isolates failing handlers and stops delivery after unsubscribe', async () => {
+    const channel = `test:${randomUUID()}`
+    const bus = await createEventBus({ publisher: conns[0]!, subscriber: conns[1]!, channel })
+    const good = vi.fn()
+    bus.subscribe(() => {
+      throw new Error('sync boom')
+    })
+    bus.subscribe(async () => {
+      throw new Error('async boom')
+    })
+    const off = bus.subscribe(good)
+    await bus.publish({ type: 'settings.changed', keys: ['a'], by: null })
+    await vi.waitFor(() => expect(good).toHaveBeenCalledTimes(1))
+    off()
+    await bus.publish({ type: 'settings.changed', keys: ['b'], by: null })
+    await new Promise((resolve) => setTimeout(resolve, 200))
+    expect(good).toHaveBeenCalledTimes(1)
+    await bus.close()
+  })
 })
