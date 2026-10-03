@@ -7,6 +7,7 @@ import { acquireSingletonLock } from './lock.ts'
 import { createMtcuteProxyChecker } from './proxies/checker.ts'
 import { createProxyHealth } from './proxies/health.ts'
 import { syncProxyStore } from './proxies/proxy-store.ts'
+import { prepareMtcuteStorage } from './telegram/storage.ts'
 import { createWorkerRuntime } from './runtime.ts'
 
 const env = loadEnv()
@@ -30,6 +31,9 @@ const queueRedis = createRedis(env.REDIS_URL, 'worker-queues', logger, { forQueu
 const bus = await createEventBus({ publisher: redis, subscriber, logger })
 const cipher = createCipher(env.APP_ENCRYPTION_KEY)
 const settings = await SettingsService.create({ db: database.db, cipher, bus, logger })
+
+// mtcute's own tables: migrate once before accounts load in parallel
+await prepareMtcuteStorage(database.pool, database.db, cipher)
 
 const deps: WorkerDeps = { env, db: database.db, pool: database.pool, redis, queueRedis, bus, settings, cipher, logger }
 const proxyChecker = createMtcuteProxyChecker(() => ({ apiId: settings.get('telegram.desktop.apiId'), apiHash: settings.get('telegram.desktop.apiHash') }))

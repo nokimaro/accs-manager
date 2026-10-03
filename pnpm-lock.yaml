@@ -348,6 +348,9 @@ importers:
       '@mtcute/node':
         specifier: ^0.32.3
         version: 0.32.3
+      '@mtcute/postgres':
+        specifier: ^0.32.3
+        version: 0.32.3
       '@workspace/db':
         specifier: workspace:*
         version: link:../../packages/db
@@ -1621,6 +1624,9 @@ packages:
 
   '@mtcute/node@0.32.3':
     resolution: {integrity: sha512-MZXL3ya6CPxjgvhF6w5OIUDDRj4Q3Kco8GgHs87AgVMeYLhd31j1umnxk6T1FrvaMmozN7LgRFvxifC4uLaArA==}
+
+  '@mtcute/postgres@0.32.3':
+    resolution: {integrity: sha512-Tg8/HF8cqU07zqMtKxkFy2yddjpd2n+9/agCphBvATYkEsHTk6WvG7r21OmpBHyCerSy9u9/8X8r0YMULJsmRA==}
 
   '@mtcute/tl-runtime@0.32.0':
     resolution: {integrity: sha512-9TdepMheddBismZDYVng9a0m+D4TqUPWcFc83JiArsXv+pmQiNWzXcoyoTUODUA35i6VOIdO5CuNd8hnKoZHpg==}
@@ -5899,6 +5905,10 @@ snapshots:
       better-sqlite3: 12.11.1
     transitivePeerDependencies:
       - ws
+
+  '@mtcute/postgres@0.32.3':
+    dependencies:
+      '@mtcute/core': 0.32.3
 
   '@mtcute/tl-runtime@0.32.0':
     dependencies:

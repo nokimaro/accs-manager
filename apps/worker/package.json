@@ -12,6 +12,7 @@
   "dependencies": {
     "@mtcute/core": "^0.32.3",
     "@mtcute/node": "^0.32.3",
+    "@mtcute/postgres": "^0.32.3",
     "@workspace/db": "workspace:*",
     "@workspace/server": "workspace:*",
     "@workspace/shared": "workspace:*",
