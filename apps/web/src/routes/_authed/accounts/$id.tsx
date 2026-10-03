@@ -71,7 +71,7 @@ function ProfileCard({ a }: { a: AccountDto }) {
             <span title={formatDateTime(a.lastOkAt)}>{formatRelative(a.lastOkAt)}</span>
           </Row>
           <Row label="Добавлен">
-            {formatDate(a.createdAt)} · {a.source === 'tdata' ? 'из tdata' : 'вход по QR'}
+            {formatDate(a.createdAt)} · {{ tdata: 'из tdata', qr: 'вход по QR', phone: 'вход по номеру' }[a.source]}
           </Row>
           <Row label="Устройство">
             {a.device.deviceModel}, {a.device.systemVersion}, {a.clientProfile === 'desktop' ? 'Telegram Desktop' : 'своё приложение'} {a.device.appVersion}

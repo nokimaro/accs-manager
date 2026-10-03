@@ -2,7 +2,7 @@ import * as React from 'react'
 import { useMutation, useQueryClient, useSuspenseQuery } from '@tanstack/react-query'
 import { createFileRoute, Link } from '@tanstack/react-router'
 import { createColumnHelper } from '@tanstack/react-table'
-import { accountTitle, type AccountDto } from '@workspace/shared/accounts'
+import { accountSourceLabels, accountTitle, type AccountDto } from '@workspace/shared/accounts'
 import { Badge } from '@workspace/ui/components/badge'
 import { Button } from '@workspace/ui/components/button'
 import {
@@ -92,7 +92,7 @@ function AccountsPage() {
         }),
         col.accessor('lastCodeAt', { header: 'Последний код', cell: (info) => <span title={formatDateTime(info.getValue())}>{formatRelative(info.getValue())}</span> }),
         col.accessor('lastOkAt', { header: 'На связи', cell: (info) => <span title={formatDateTime(info.getValue())} className="text-muted-foreground text-sm">{formatRelative(info.getValue())}</span> }),
-        col.accessor('source', { header: 'Источник', cell: (info) => (info.getValue() === 'tdata' ? 'tdata' : 'QR') }),
+        col.accessor('source', { header: 'Источник', cell: (info) => accountSourceLabels[info.getValue()] }),
         col.display({
           id: 'actions',
           header: () => <span className="sr-only">Действия</span>,

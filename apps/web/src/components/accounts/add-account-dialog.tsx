@@ -4,6 +4,7 @@ import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, Di
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@workspace/ui/components/tabs'
 import { PlusIcon } from 'lucide-react'
 import { ImportTdataTab } from './import-tdata-tab'
+import { PhoneLoginTab } from './phone-login-tab'
 import { QrLoginTab } from './qr-login-tab'
 
 export function AddAccountDialog() {
@@ -26,18 +27,22 @@ export function AddAccountDialog() {
       <DialogContent className="sm:max-w-3xl">
         <DialogHeader>
           <DialogTitle>Новый аккаунт</DialogTitle>
-          <DialogDescription>Перенос сессии из Telegram Desktop или вход новой сессией по QR-коду.</DialogDescription>
+          <DialogDescription>Перенос сессии из Telegram Desktop или вход новой сессией — по QR-коду или по номеру телефона.</DialogDescription>
         </DialogHeader>
         <Tabs defaultValue="tdata" key={session}>
           <TabsList>
             <TabsTrigger value="tdata">Из tdata</TabsTrigger>
             <TabsTrigger value="qr">По QR-коду</TabsTrigger>
+            <TabsTrigger value="phone">По номеру</TabsTrigger>
           </TabsList>
           <TabsContent value="tdata" className="pt-4">
             <ImportTdataTab onDone={close} />
           </TabsContent>
           <TabsContent value="qr" className="pt-4">
             <QrLoginTab onDone={close} />
+          </TabsContent>
+          <TabsContent value="phone" className="pt-4">
+            <PhoneLoginTab onDone={close} />
           </TabsContent>
         </Tabs>
       </DialogContent>
