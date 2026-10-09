@@ -1,5 +1,5 @@
-import { accounts, and, codeMessages, desc, eq, inArray, isNull, ne, proxies, sql, type Db } from '@workspace/db'
-import type { AccountDto, UpdateAccountInput } from '@workspace/shared/accounts'
+import { accounts, and, codeMessages, count, desc, eq, inArray, isNull, ne, proxies, sql, type Db } from '@workspace/db'
+import { REUSE_PROXY, type AccountDto, type UpdateAccountInput } from '@workspace/shared/accounts'
 import { DomainError } from '../lib/errors.ts'
 
 type AccountRow = typeof accounts.$inferSelect
@@ -77,25 +77,61 @@ export async function updateAccount(db: Db, id: string, input: UpdateAccountInpu
   return getAccount(db, id)
 }
 
-/** Enabled, working (or not yet checked) and not used by another account. */
-export async function isProxyFree(db: Db, proxyId: string, exceptAccountId?: string): Promise<boolean> {
+const USABLE_PROXY_STATUSES = ['ok', 'unchecked', 'failing'] as const
+
+/** Enabled and working, not yet checked or only failing. Any number of accounts may share it. */
+export async function isProxyUsable(db: Db, proxyId: string): Promise<boolean> {
   const [proxy] = await db
     .select({ id: proxies.id })
     .from(proxies)
-    .leftJoin(accounts, exceptAccountId ? and(eq(accounts.proxyId, proxies.id), ne(accounts.id, exceptAccountId)) : eq(accounts.proxyId, proxies.id))
-    .where(and(eq(proxies.id, proxyId), isNull(proxies.disabledAt), inArray(proxies.status, ['ok', 'unchecked', 'failing']), isNull(accounts.id)))
+    .where(and(eq(proxies.id, proxyId), isNull(proxies.disabledAt), inArray(proxies.status, [...USABLE_PROXY_STATUSES])))
   return Boolean(proxy)
 }
 
+/** Usable proxies and how many accounts each carries (`exceptAccountId` is not counted: it is about to move). */
+export async function proxyLoads(db: Db, exceptAccountId?: string): Promise<Map<string, number>> {
+  const rows = await db
+    .select({ id: proxies.id, accounts: count(accounts.id) })
+    .from(proxies)
+    .leftJoin(accounts, exceptAccountId ? and(eq(accounts.proxyId, proxies.id), ne(accounts.id, exceptAccountId)) : eq(accounts.proxyId, proxies.id))
+    .where(and(isNull(proxies.disabledAt), inArray(proxies.status, [...USABLE_PROXY_STATUSES])))
+    .groupBy(proxies.id)
+  return new Map(rows.map((r) => [r.id, r.accounts]))
+}
+
 /**
- * Binds a free proxy (or none: `direct`, only by an explicit decision). A free proxy is enabled, not
- * dead/expired/provisioning and not used by another account.
+ * «Переиспользовать прокси»: the proxy with the fewest accounts, a random one among equals. The pick is counted
+ * in `loads`, so several picks in a row spread evenly. Null when there is no usable proxy at all.
  */
-export async function setAccountProxy(db: Db, id: string, proxyId: string | null): Promise<AccountDto> {
-  const account = await getAccount(db, id)
-  if (proxyId && !(await isProxyFree(db, proxyId, id))) {
-    throw new DomainError(409, 'proxy_unavailable', 'Прокси не работает, отключён или уже занят другим аккаунтом')
+export function takeLeastLoaded(loads: Map<string, number>, random: () => number = Math.random): string | null {
+  let min = Infinity
+  let ties: string[] = []
+  for (const [id, n] of loads) {
+    if (n < min) [min, ties] = [n, [id]]
+    else if (n === min) ties.push(id)
   }
+  const id = ties[Math.floor(random() * ties.length)]
+  if (id === undefined) return null
+  loads.set(id, min + 1)
+  return id
+}
+
+/** A proxy choice from the UI (`reuse`, a proxy id, or null = direct) made concrete, or a 409 saying why it cannot be. */
+export async function resolveProxyChoice(db: Db, choice: string | null, exceptAccountId?: string): Promise<string | null> {
+  if (choice === null) return null
+  if (choice === REUSE_PROXY) {
+    const id = takeLeastLoaded(await proxyLoads(db, exceptAccountId))
+    if (!id) throw new DomainError(409, 'no_usable_proxy', 'Нет ни одного рабочего прокси — добавьте прокси или выберите «Напрямую»')
+    return id
+  }
+  if (!(await isProxyUsable(db, choice))) throw new DomainError(409, 'proxy_unavailable', 'Прокси не работает или отключён')
+  return choice
+}
+
+/** Binds a proxy (`reuse` = the least loaded one), or none: `direct`, only by an explicit decision. */
+export async function setAccountProxy(db: Db, id: string, choice: string | null): Promise<AccountDto> {
+  const account = await getAccount(db, id)
+  const proxyId = await resolveProxyChoice(db, choice, id)
   await db
     .update(accounts)
     .set({

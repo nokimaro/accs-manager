@@ -115,10 +115,22 @@ describe('QrLoginTab', () => {
     await waitFor(() => expect(fetchMock).toHaveBeenCalledWith(`/api/qr/${QR_ID}`, expect.objectContaining({ method: 'DELETE' })))
   })
 
-  it('without free proxies waits for an explicit choice instead of going direct', async () => {
+  it('without any working proxy waits for an explicit choice instead of going direct', async () => {
     fetchMock.mockImplementation(async (url: string) => (url === '/api/proxies' ? json({ items: [] }) : json({ qrId: QR_ID }, 201)))
     renderWithClient(<QrLoginTab onDone={vi.fn()} />)
-    await waitFor(() => expect(screen.getByLabelText('Подключение')).toHaveTextContent('Свободных прокси нет — выберите вариант'))
+    await waitFor(() => expect(screen.getByLabelText('Подключение')).toHaveTextContent('Рабочих прокси нет — выберите вариант'))
     expect(screen.getByRole('button', { name: 'Показать QR-код' })).toBeDisabled()
+  })
+
+  it('with every proxy taken reuses the least loaded one', async () => {
+    const busy = proxyFixture({ accounts: [{ id: 'x', label: 'другой', phone: null, username: null }] })
+    fetchMock.mockImplementation(async (url: string) => (url === '/api/proxies' ? json({ items: [busy] }) : json({ qrId: QR_ID }, 201)))
+    const user = userEvent.setup()
+    renderWithClient(<QrLoginTab onDone={vi.fn()} />)
+    await waitFor(() => expect(screen.getByLabelText('Подключение')).toHaveTextContent('Переиспользовать прокси — наименее загруженный'))
+    await user.click(screen.getByRole('button', { name: 'Показать QR-код' }))
+    await waitFor(() => expect(fetchMock).toHaveBeenCalledWith('/api/qr', expect.objectContaining({ method: 'POST' })))
+    const [, init] = fetchMock.mock.calls.find(([url]) => url === '/api/qr') as [string, RequestInit]
+    expect(JSON.parse(String(init.body))).toEqual({ proxyId: 'reuse' })
   })
 })

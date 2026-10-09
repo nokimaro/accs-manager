@@ -30,7 +30,7 @@ describe('proxies api', () => {
     })
     expect(res.status).toBe(201)
     const dto = (await res.json()) as ProxyDto
-    expect(dto).toMatchObject({ source: 'manual', type: 'socks5', host: '194.53.188.22', username: 'kz1', hasPassword: true, status: 'unchecked', account: null })
+    expect(dto).toMatchObject({ source: 'manual', type: 'socks5', host: '194.53.188.22', username: 'kz1', hasPassword: true, status: 'unchecked', accounts: [] })
     expect(JSON.stringify(dto)).not.toContain('s3cret-pass')
     const [row] = await ta.t.db.select().from(proxies).where(eq(proxies.id, dto.id))
     expect(row!.passwordEnc).toMatch(/^v1:/)
@@ -77,7 +77,7 @@ describe('proxies api', () => {
     expect(list.filter((p) => p.tag === 'batch-1')).toHaveLength(2)
   })
 
-  it('shows the bound account and protects bound and synced proxies', async () => {
+  it('shows every bound account and protects bound and synced proxies', async () => {
     const [bound] = await ta.t.db.insert(proxies).values({ source: 'manual', type: 'http', host: '10.1.1.1', port: 3128 }).returning()
     const [synced] = await ta.t.db.insert(proxies).values({ source: 'proxy_store', externalId: '5133763', type: 'http', host: '10.1.1.2', port: 3128 }).returning()
     const [loose] = await ta.t.db.insert(proxies).values({ source: 'manual', type: 'http', host: '10.1.1.3', port: 3128 }).returning()
@@ -87,8 +87,18 @@ describe('proxies api', () => {
       .values({ tgUserId: 777, phone: '77001234567', label: 'main', source: 'tdata', clientProfile: 'desktop', device, connectionMode: 'proxy', proxyId: bound!.id })
       .returning()
 
+    const [second] = await ta.t.db
+      .insert(accounts)
+      .values({ tgUserId: 778, username: 'alt', source: 'tdata', clientProfile: 'desktop', device, connectionMode: 'proxy', proxyId: bound!.id })
+      .returning()
+
     const list = ((await (await send(ta.app, '/api/proxies', { cookie })).json()) as { items: ProxyDto[] }).items
-    expect(list.find((p) => p.id === bound!.id)!.account).toEqual({ id: account!.id, label: 'main', phone: '77001234567', username: null })
+    expect(list.find((p) => p.id === bound!.id)!.accounts).toEqual([
+      { id: account!.id, label: 'main', phone: '77001234567', username: null },
+      { id: second!.id, label: null, phone: null, username: 'alt' },
+    ])
+    expect(list.find((p) => p.id === loose!.id)!.accounts).toEqual([])
+    expect(((await (await send(ta.app, `/api/proxies/${bound!.id}`, { cookie, method: 'PATCH', body: { tag: 'shared' } })).json()) as ProxyDto).accounts).toHaveLength(2)
 
     const disableBound = await send(ta.app, `/api/proxies/${bound!.id}`, { cookie, method: 'PATCH', body: { disabled: true } })
     expect(disableBound.status).toBe(409)

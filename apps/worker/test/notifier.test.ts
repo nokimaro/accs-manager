@@ -102,6 +102,8 @@ describe('notifier', () => {
   it('warns about account problems and about proxies running out', async () => {
     const [p] = await w.t.db.insert(proxies).values({ source: 'proxy_store', externalId: '1', type: 'socks5', host: '194.53.188.22', port: 50101, status: 'ok', expiresAt: new Date(Date.now() + 2 * 86_400_000) }).returning()
     const [a] = await w.t.db.insert(accounts).values({ tgUserId: 3, phone: '77005550000', source: 'tdata', clientProfile: 'desktop', device, connectionMode: 'proxy', proxyId: p!.id }).returning()
+    // a reused proxy: both accounts on one line
+    await w.t.db.insert(accounts).values({ tgUserId: 4, phone: '77005550001', source: 'tdata', clientProfile: 'desktop', device, connectionMode: 'proxy', proxyId: p!.id })
     const bot = fakeBot()
     const notifier = createNotifier(w.deps, bot.fetchFn)
     try {
@@ -113,7 +115,7 @@ describe('notifier', () => {
       const texts = bot.calls.map((c) => c.body.text as string).sort()
       expect(texts).toHaveLength(2)
       expect(texts[1]).toBe('⚠️ <code>+77005550000</code> остановлен — прокси недоступен: Прокси не работает')
-      expect(texts[0]).toMatch(/^⏳ Скоро заканчивается оплата прокси:\n• <code>194\.53\.188\.22:50101<\/code> до .+ — <code>\+77005550000<\/code>$/)
+      expect(texts[0]).toMatch(/^⏳ Скоро заканчивается оплата прокси:\n• <code>194\.53\.188\.22:50101<\/code> до .+ — <code>\+77005550000<\/code>, <code>\+77005550001<\/code>$/)
     } finally {
       await notifier.stop()
     }

@@ -1,5 +1,5 @@
 import { infiniteQueryOptions, queryOptions } from '@tanstack/react-query'
-import type { AccountDto, AccountSessionDto, AccountStatus, CloudPasswordInfoDto, CodeDto } from '@workspace/shared/accounts'
+import { REUSE_PROXY, type AccountDto, type AccountSessionDto, type AccountStatus, type CloudPasswordInfoDto, type CodeDto } from '@workspace/shared/accounts'
 import type { ProxyDto } from '@workspace/shared/proxies'
 import { api } from './api'
 
@@ -74,12 +74,18 @@ export const ACCOUNT_STATUS_FILTERS = {
 } as const satisfies Record<string, readonly AccountStatus[] | null>
 export type AccountStatusFilter = keyof typeof ACCOUNT_STATUS_FILTERS
 
-/** Proxies an account may take: enabled, working or not yet checked, not used by another account. */
-export function freeProxies(all: ProxyDto[], keepProxyId?: string | null): ProxyDto[] {
-  return all.filter(
-    (p) => p.id === keepProxyId || (p.disabledAt === null && p.account === null && (p.status === 'ok' || p.status === 'unchecked' || p.status === 'failing')),
-  )
+/** Proxies an account may take: enabled, working, not yet checked or only failing — shared ones too. */
+export function usableProxies(all: ProxyDto[], keepProxyId?: string | null): ProxyDto[] {
+  return all.filter((p) => p.id === keepProxyId || (p.disabledAt === null && (p.status === 'ok' || p.status === 'unchecked' || p.status === 'failing')))
 }
+
+/** Usable proxies no account uses yet. */
+export function freeProxies(all: ProxyDto[]): ProxyDto[] {
+  return usableProxies(all).filter((p) => p.accounts.length === 0)
+}
+
+/** «Переиспользовать прокси»: the server takes the usable proxy with the fewest accounts, a random one among equals. */
+export const REUSE_CHOICE = { value: REUSE_PROXY, label: 'Переиспользовать прокси — наименее загруженный' }
 
 export function proxyLabel(p: Pick<ProxyDto, 'type' | 'host' | 'port' | 'tgCountry' | 'latencyMs'>): string {
   const extra = [p.tgCountry, p.latencyMs !== null ? `${p.latencyMs} мс` : null].filter(Boolean).join(', ')

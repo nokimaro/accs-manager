@@ -19,9 +19,9 @@ beforeEach(() => navigate.mockReset())
 afterEach(() => vi.unstubAllGlobals())
 
 describe('AccountRouteForm', () => {
-  it('an account waiting for a proxy gets one chosen from the free ones', async () => {
+  it('an account waiting for a proxy gets one chosen from the free ones or the shared ones', async () => {
     const free = proxyFixture()
-    const busy = proxyFixture({ id: '00000000-0000-4000-8000-000000000002', host: '194.53.188.11', account: { id: 'x', label: 'другой', phone: null, username: null } })
+    const busy = proxyFixture({ id: '00000000-0000-4000-8000-000000000002', host: '194.53.188.11', accounts: [{ id: 'x', label: 'другой', phone: null, username: null }] })
     fetchMock = vi.fn(async (_url: string, init?: RequestInit) =>
       init?.method === 'PUT' ? json({ ...account, proxy: { ...free, status: 'ok' } }) : json({ items: [free, busy] }),
     )
@@ -34,7 +34,8 @@ describe('AccountRouteForm', () => {
 
     await user.click(screen.getByLabelText('Прокси'))
     expect(await screen.findByRole('option', { name: /194\.53\.188\.10:50101/ })).toBeInTheDocument()
-    expect(screen.queryByRole('option', { name: /194\.53\.188\.11/ })).not.toBeInTheDocument()
+    expect(screen.getByRole('option', { name: /194\.53\.188\.11:50101 .*· 1 акк\./ })).toBeInTheDocument()
+    expect(screen.getByRole('option', { name: 'Переиспользовать прокси — наименее загруженный' })).toBeInTheDocument()
     await user.click(screen.getByRole('option', { name: /194\.53\.188\.10:50101/ }))
     await user.click(screen.getByRole('button', { name: 'Сохранить и переподключить' }))
 

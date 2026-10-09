@@ -9,7 +9,7 @@ import { Card, CardAction, CardContent, CardDescription, CardHeader, CardTitle }
 import { toast } from '@workspace/ui/components/toast'
 import { ArrowLeftIcon, PauseIcon, PlayIcon, RefreshCwIcon } from 'lucide-react'
 import { AccountNotesForm } from '@/components/accounts/account-notes-form'
-import { PhoneCopy } from '@/components/accounts/account-name'
+import { AccountName, PhoneCopy } from '@/components/accounts/account-name'
 import { AccountRouteForm } from '@/components/accounts/account-route-form'
 import { AccountSessions } from '@/components/accounts/account-sessions'
 import { AccountStatusBadge } from '@/components/accounts/account-status-badge'
@@ -22,6 +22,7 @@ import { ProxyStatusBadge } from '@/components/proxies/proxy-status-badge'
 import { accountQueryOptions, accountsQueryOptions, codesQueryOptions } from '@/lib/accounts'
 import { api, ApiError } from '@/lib/api'
 import { formatDate, formatDateTime, formatRelative } from '@/lib/format'
+import { proxiesQueryOptions } from '@/lib/proxies'
 import { pageTitle } from '@/lib/title'
 
 export const Route = createFileRoute('/_authed/accounts/$id')({
@@ -36,6 +37,23 @@ function Row({ label, children }: { label: string; children: React.ReactNode }) 
       <dt className="text-muted-foreground">{label}</dt>
       <dd className="min-w-0 break-words">{children}</dd>
     </div>
+  )
+}
+
+/** Other accounts going through the same proxy: a reused proxy is shared. */
+function ProxyNeighbours({ a }: { a: AccountDto }) {
+  const proxies = useQuery(proxiesQueryOptions)
+  const others = proxies.data?.items.find((p) => p.id === a.proxy?.id)?.accounts.filter((o) => o.id !== a.id) ?? []
+  if (others.length === 0) return null
+  return (
+    <span className="flex flex-wrap items-start gap-x-4 gap-y-1">
+      <span>Также на этом прокси:</span>
+      {others.map((o) => (
+        <span key={o.id} className="text-foreground">
+          <AccountName id={o.id} account={o} />
+        </span>
+      ))}
+    </span>
   )
 }
 
@@ -158,10 +176,13 @@ function AccountPage() {
               <CardTitle>Подключение</CardTitle>
               <CardDescription>
                 {a.proxy ? (
-                  <span className="flex flex-wrap items-center gap-2">
-                    Сейчас: <span className="font-mono">{`${a.proxy.host}:${a.proxy.port}`}</span>
-                    {a.proxy.tgCountry && <span>{a.proxy.tgCountry}</span>}
-                    <ProxyStatusBadge status={a.proxy.status} />
+                  <span className="flex flex-col gap-1">
+                    <span className="flex flex-wrap items-center gap-2">
+                      Сейчас: <span className="font-mono">{`${a.proxy.host}:${a.proxy.port}`}</span>
+                      {a.proxy.tgCountry && <span>{a.proxy.tgCountry}</span>}
+                      <ProxyStatusBadge status={a.proxy.status} />
+                    </span>
+                    <ProxyNeighbours a={a} />
                   </span>
                 ) : a.connectionMode === 'direct' ? (
                   'Сейчас: напрямую, без прокси'

@@ -15,7 +15,7 @@ afterAll(async () => {
 })
 
 describe('phone login api', () => {
-  it('needs the own api_id, a real phone number and a free proxy', async () => {
+  it('needs the own api_id, a real phone number and a working proxy', async () => {
     const start = (body: unknown) => send(ta.app, '/api/phone-login', { cookie, body })
     const noApi = await start({ phone: '+7 700 123 45 67', proxyId: null })
     expect(noApi.status).toBe(409)
@@ -24,9 +24,9 @@ describe('phone login api', () => {
     await ta.deps.settings.update({ 'telegram.own.apiId': 123456, 'telegram.own.apiHash': '0123456789abcdef0123456789abcdef' }, { adminId: null })
     expect((await start({ phone: 'call me', proxyId: null })).status).toBe(400)
     const [dead] = await ta.t.db.insert(proxies).values({ source: 'manual', type: 'socks5', host: '10.5.5.1', port: 1080, status: 'dead' }).returning()
-    const busy = await start({ phone: '+77001234567', proxyId: dead!.id })
-    expect(busy.status).toBe(409)
-    expect(await busy.json()).toMatchObject({ error: 'proxy_unavailable' })
+    const broken = await start({ phone: '+77001234567', proxyId: dead!.id })
+    expect(broken.status).toBe(409)
+    expect(await broken.json()).toMatchObject({ error: 'proxy_unavailable' })
   })
 
   it('starts a login on the worker and passes code, password, resend and cancel over pub/sub — never into the audit log', async () => {

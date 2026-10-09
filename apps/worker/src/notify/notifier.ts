@@ -65,12 +65,20 @@ export function createNotifier(deps: WorkerDeps, fetchFn: BotFetch) {
     }
     if (job.proxyIds.length === 0) return
     const rows = await db
-      .select({ host: proxies.host, port: proxies.port, expiresAt: proxies.expiresAt, account: accounts })
+      .select({ id: proxies.id, host: proxies.host, port: proxies.port, expiresAt: proxies.expiresAt, account: accounts })
       .from(proxies)
       .leftJoin(accounts, eq(accounts.proxyId, proxies.id))
       .where(inArray(proxies.id, job.proxyIds))
-      .orderBy(proxies.expiresAt)
-    const list = rows.flatMap((r) => (r.expiresAt ? [{ host: r.host, port: r.port, expiresAt: r.expiresAt, account: r.account }] : []))
+      .orderBy(proxies.expiresAt, accounts.createdAt)
+    // a reused proxy carries several accounts: one line per proxy
+    const byProxy = new Map<string, { host: string; port: number; expiresAt: Date; accounts: AccountRow[] }>()
+    for (const r of rows) {
+      if (!r.expiresAt) continue
+      const line = byProxy.get(r.id) ?? { host: r.host, port: r.port, expiresAt: r.expiresAt, accounts: [] }
+      if (r.account) line.accounts.push(r.account)
+      byProxy.set(r.id, line)
+    }
+    const list = [...byProxy.values()]
     if (list.length > 0) await send(formatProxyExpiringMessage(list))
   }
 

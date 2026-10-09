@@ -4,7 +4,7 @@ import type { AccountDto } from '@workspace/shared/accounts'
 import { Button } from '@workspace/ui/components/button'
 import { Field, FieldDescription, FieldError, FieldGroup, FieldLabel } from '@workspace/ui/components/field'
 import { toast } from '@workspace/ui/components/toast'
-import { accountQueryOptions, accountsQueryOptions, freeProxies } from '@/lib/accounts'
+import { accountQueryOptions, accountsQueryOptions, REUSE_CHOICE, usableProxies } from '@/lib/accounts'
 import { api } from '@/lib/api'
 import { proxiesQueryOptions } from '@/lib/proxies'
 import { RouteSelect, type RouteChoice } from './route-select'
@@ -52,12 +52,12 @@ export function AccountRouteForm({ account }: { account: AccountDto }) {
             id="account-route"
             value={choice}
             onChange={setChoice}
-            proxies={freeProxies(proxies.data?.items ?? [], account.proxy?.id)}
-            special={[{ value: DIRECT, label: 'Напрямую, без прокси' }]}
+            proxies={usableProxies(proxies.data?.items ?? [], account.proxy?.id)}
+            special={[REUSE_CHOICE, { value: DIRECT, label: 'Напрямую, без прокси' }]}
             placeholder="Выберите прокси"
           />
           <FieldDescription>
-            Один прокси — один аккаунт. Без прокси Telegram увидит IP сервера панели — выбирайте это только осознанно.
+            Прокси может быть общим для нескольких аккаунтов. Без прокси Telegram увидит IP сервера панели — выбирайте это только осознанно.
           </FieldDescription>
           {save.error && <FieldError>{save.error.message}</FieldError>}
         </Field>

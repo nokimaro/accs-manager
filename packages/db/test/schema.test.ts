@@ -1,4 +1,4 @@
-import { eq, sql } from 'drizzle-orm'
+import { eq, inArray, sql } from 'drizzle-orm'
 import { afterAll, beforeAll, describe, expect, inject, it } from 'vitest'
 import { accountAuth, accounts, admins, adminSessions, codeMessages, proxies, settings } from '../src/index.ts'
 import { createTestDatabase, type TestDatabase } from '../src/testing.ts'
@@ -60,13 +60,14 @@ describe('schema', () => {
     await t.db.insert(proxies).values({ ...row, username: 'u' })
   })
 
-  it('binds one proxy to at most one account and frees it when the proxy goes', async () => {
+  it('lets several accounts share a proxy and frees them all when the proxy goes', async () => {
     const [p] = await t.db.insert(proxies).values({ source: 'manual', type: 'http', host: '10.0.0.2', port: 3128 }).returning()
     const [a] = await t.db.insert(accounts).values(account(1001, p!.id)).returning()
-    await expect(t.db.insert(accounts).values(account(1002, p!.id))).rejects.toThrow()
+    const [b] = await t.db.insert(accounts).values(account(1002, p!.id)).returning()
     await t.db.delete(proxies).where(eq(proxies.id, p!.id))
-    const [after] = await t.db.select().from(accounts).where(eq(accounts.id, a!.id))
-    expect(after).toMatchObject({ proxyId: null, status: 'pending_check', device })
+    const after = await t.db.select().from(accounts).where(inArray(accounts.id, [a!.id, b!.id]))
+    expect(after).toHaveLength(2)
+    for (const row of after) expect(row).toMatchObject({ proxyId: null, status: 'pending_check', device })
   })
 
   it('keeps the cloud password the panel knows, encrypted, on the account', async () => {

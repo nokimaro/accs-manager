@@ -149,7 +149,8 @@ export const proxyDto = z.object({
   expiresAt: z.string().nullable(),
   disabledAt: z.string().nullable(),
   createdAt: z.string(),
-  account: proxyAccountRef.nullable(),
+  /** accounts bound to the proxy: several share it when a proxy is reused */
+  accounts: z.array(proxyAccountRef),
 })
 export type ProxyDto = z.output<typeof proxyDto>
 

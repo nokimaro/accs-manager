@@ -1,4 +1,4 @@
-import { auditLog, desc, eq } from '@workspace/db'
+import { auditLog, desc, eq, proxies } from '@workspace/db'
 import { createRedis } from '@workspace/server'
 import { qrControlChannel } from '@workspace/shared/commands'
 import { afterAll, beforeAll, describe, expect, inject, it, vi } from 'vitest'
@@ -26,6 +26,14 @@ describe('QR login api', () => {
     ta.commands.sent = []
     const { qrId } = (await (await send(ta.app, '/api/qr', { cookie, body: { proxyId: null } })).json()) as { qrId: string }
     expect(ta.commands.sent).toEqual([{ type: 'qr.start', qrId, proxyId: null, adminId: expect.any(String) }])
+
+    // «reuse» reaches the worker as a concrete proxy, or refuses when there is no working one
+    expect(await (await send(ta.app, '/api/qr', { cookie, body: { proxyId: 'reuse' } })).json()).toMatchObject({ error: 'no_usable_proxy' })
+    const [proxy] = await ta.t.db.insert(proxies).values({ source: 'manual', type: 'socks5', host: '10.7.7.1', port: 1080, status: 'ok' }).returning()
+    ta.commands.sent = []
+    await send(ta.app, '/api/qr', { cookie, body: { proxyId: 'reuse' } })
+    expect(ta.commands.sent).toEqual([{ type: 'qr.start', qrId: expect.any(String), proxyId: proxy!.id, adminId: expect.any(String) }])
+    await ta.t.db.delete(proxies).where(eq(proxies.id, proxy!.id))
 
     const sub = createRedis(inject('redisUrl'), 'qr-test-sub')
     const received: string[] = []

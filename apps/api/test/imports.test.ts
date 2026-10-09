@@ -145,7 +145,43 @@ describe('confirming an import', () => {
     expect([byUser[9101], byUser[9102], byUser[9103]]).toEqual([unchecked.id, ok.id, failing.id])
   })
 
-  it('refuses duplicates, busy or broken proxies and an empty pool for "auto"', async () => {
+  it('«reuse» spreads accounts over the least loaded proxies, leaving the free ones «auto» needs', async () => {
+    const batch = await prepared([9201, 9202, 9203, 9204, 9205])
+    const [a, b, c, d, e] = batch.items
+    const shared = await proxy()
+    const quiet = await proxy()
+    const free = await proxy()
+    await proxy({ disabledAt: new Date() })
+    await proxy({ status: 'dead' })
+    await ta.t.db.insert(accounts).values([
+      { tgUserId: 9290, source: 'tdata', clientProfile: 'desktop', device, connectionMode: 'proxy', proxyId: shared.id },
+      { tgUserId: 9291, source: 'tdata', clientProfile: 'desktop', device, connectionMode: 'proxy', proxyId: shared.id },
+      { tgUserId: 9292, source: 'tdata', clientProfile: 'desktop', device, connectionMode: 'proxy', proxyId: quiet.id },
+    ])
+    const res = await send(ta.app, `/api/imports/${batch.id}/confirm`, {
+      cookie,
+      body: {
+        items: [
+          { id: a!.id, decision: 'reuse' },
+          { id: b!.id, decision: 'reuse' },
+          { id: c!.id, decision: 'proxy', proxyId: shared.id },
+          { id: d!.id, decision: 'auto' },
+          { id: e!.id, decision: 'reuse' },
+        ],
+      },
+    })
+    expect(await res.json()).toEqual({ created: 5, skipped: 0 })
+    const byUser = Object.fromEntries((await ta.t.db.select().from(accounts)).map((r) => [r.tgUserId, r.proxyId]))
+    expect(byUser[9203]).toBe(shared.id)
+    expect(byUser[9204]).toBe(free.id)
+    // after the explicit pick and «auto»: shared 3, quiet 1, free 1 — the three «reuse» go to quiet and free, never to shared
+    expect([byUser[9201], byUser[9202], byUser[9205]]).not.toContain(shared.id)
+    const load = (id: string) => Object.values(byUser).filter((p) => p === id).length
+    expect(load(shared.id)).toBe(3)
+    expect([load(quiet.id), load(free.id)].sort()).toEqual([2, 3])
+  })
+
+  it('refuses duplicates, broken proxies, an empty pool for "auto" and no working proxy at all for "reuse"', async () => {
     const first = await prepared([9001])
     await send(ta.app, `/api/imports/${first.id}/confirm`, { cookie, body: { items: [{ id: first.items[0]!.id, decision: 'direct' }] } })
 
@@ -161,6 +197,7 @@ describe('confirming an import', () => {
     const dead = await proxy({ status: 'dead' })
     await refuse([{ id: fresh!.id, decision: 'proxy', proxyId: dead.id }], 'proxy_unavailable')
     await refuse([{ id: fresh!.id, decision: 'auto' }], 'no_free_proxy')
+    await refuse([{ id: fresh!.id, decision: 'reuse' }], 'no_usable_proxy')
     // nothing was half-done
     expect((await ta.t.db.select().from(accounts)).map((a) => a.tgUserId)).toEqual([9001])
   })

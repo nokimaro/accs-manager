@@ -36,7 +36,6 @@ function dbCause(err: unknown): { code?: string; constraint?: string } {
 
 function saveFailure(err: unknown): string {
   const { code, constraint } = dbCause(err)
-  if (code === '23505' && constraint === 'accounts_proxy_id_key') return 'Прокси уже занят другим аккаунтом — начните заново'
   if (code === '23505' && constraint === 'accounts_tg_user_id_key') return 'Этот аккаунт уже есть в панели'
   if (code === '23503') return 'Прокси удалён — начните заново'
   return 'Не удалось сохранить аккаунт — начните заново'
@@ -47,16 +46,14 @@ export function createLoginKit(deps: WorkerDeps) {
   const { db, settings, cipher, bus, logger } = deps
 
   return {
-    /** A free, usable proxy (the same rule as the api's isProxyFree), or null for an explicit «direct». */
+    /** A usable proxy (the same rule as the api's isProxyUsable; other accounts may share it), or null for an explicit «direct». */
     async proxyEndpoint(proxyId: string | null): Promise<ProxyEndpoint | null> {
       if (!proxyId) return null
-      const [row] = await db
+      const [p] = await db
         .select()
         .from(proxies)
-        .leftJoin(accounts, eq(accounts.proxyId, proxies.id))
-        .where(and(eq(proxies.id, proxyId), isNull(proxies.disabledAt), isNull(accounts.id)))
-      if (!row || !['ok', 'unchecked', 'failing'].includes(row.proxies.status)) throw new Error('Прокси недоступен или уже занят')
-      const p = row.proxies
+        .where(and(eq(proxies.id, proxyId), isNull(proxies.disabledAt)))
+      if (!p || !['ok', 'unchecked', 'failing'].includes(p.status)) throw new Error('Прокси недоступен')
       return { type: p.type, host: p.host, port: p.port, username: p.username, password: p.passwordEnc ? cipher.decrypt(p.passwordEnc) : null }
     },
 

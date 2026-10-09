@@ -7,7 +7,7 @@ import { z } from 'zod'
 import type { AppEnv } from '../deps.ts'
 import { DomainError } from '../lib/errors.ts'
 import { audited } from '../middleware/audit.ts'
-import { isProxyFree } from '../services/accounts.ts'
+import { resolveProxyChoice } from '../services/accounts.ts'
 import { validationHook } from './validation.ts'
 
 const idParam = z.object({ id: z.uuid() })
@@ -19,8 +19,7 @@ export const qrRoutes = new Hono<AppEnv>()
     if (!settings.get('telegram.own.apiId') || !settings.get('telegram.own.apiHash')) {
       throw new DomainError(409, 'own_api_missing', 'Для входа по QR нужен свой api_id и api_hash (Настройки → Telegram)')
     }
-    const { proxyId } = c.req.valid('json')
-    if (proxyId && !(await isProxyFree(db, proxyId))) throw new DomainError(409, 'proxy_unavailable', 'Прокси не работает, отключён или уже занят')
+    const proxyId = await resolveProxyChoice(db, c.req.valid('json').proxyId)
     const qrId = randomUUID()
     await commands.send({ type: 'qr.start', qrId, proxyId, adminId: c.get('admin')?.id ?? null })
     c.set('audit', { ...c.get('audit'), targetType: 'qr', targetId: qrId })

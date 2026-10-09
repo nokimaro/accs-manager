@@ -73,8 +73,13 @@ export const updateAccountInput = z.object({
 })
 export type UpdateAccountInput = z.output<typeof updateAccountInput>
 
-/** `proxyId: null` = connect directly (only by an explicit decision). */
-export const setAccountProxyInput = z.object({ proxyId: z.string().uuid().nullable() })
+/** «Переиспользовать прокси»: the usable proxy with the fewest accounts, a random one among equals. */
+export const REUSE_PROXY = 'reuse'
+
+/** A proxy id, `reuse` (the least loaded usable proxy) or `null` = connect directly (only by an explicit decision). */
+const proxyChoice = z.union([z.string().uuid(), z.literal(REUSE_PROXY)]).nullable()
+
+export const setAccountProxyInput = z.object({ proxyId: proxyChoice })
 export type SetAccountProxyInput = z.output<typeof setAccountProxyInput>
 
 export const deleteAccountQuery = z.object({ logout: z.stringbool().default(false) })
@@ -143,6 +148,7 @@ export const confirmImportInput = z.object({
       z.discriminatedUnion('decision', [
         z.object({ id: z.string().uuid(), decision: z.literal('proxy'), proxyId: z.string().uuid() }),
         z.object({ id: z.string().uuid(), decision: z.literal('auto') }),
+        z.object({ id: z.string().uuid(), decision: z.literal('reuse') }),
         z.object({ id: z.string().uuid(), decision: z.literal('direct') }),
         z.object({ id: z.string().uuid(), decision: z.literal('skip') }),
       ]),
@@ -178,7 +184,7 @@ export type CodesQuery = z.output<typeof codesQuery>
 
 // ---- QR login ----
 
-export const startQrInput = z.object({ proxyId: z.string().uuid().nullable() })
+export const startQrInput = z.object({ proxyId: proxyChoice })
 export type StartQrInput = z.output<typeof startQrInput>
 
 export const qrPasswordInput = z.object({ password: z.string().min(1).max(256) })
@@ -200,7 +206,7 @@ const digitsCode = z
   .transform((v) => v.replace(/[\s-]/g, ''))
   .pipe(z.string().regex(/^\d{3,10}$/, 'Код — только цифры'))
 
-export const startPhoneLoginInput = z.object({ phone: phoneNumber, proxyId: z.string().uuid().nullable() })
+export const startPhoneLoginInput = z.object({ phone: phoneNumber, proxyId: proxyChoice })
 export type StartPhoneLoginInput = z.output<typeof startPhoneLoginInput>
 export const phoneCodeInput = z.object({ code: digitsCode })
 

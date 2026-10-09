@@ -11,6 +11,7 @@ import { parseDuration } from '@workspace/shared/duration'
 import { and, eq, inArray, isNull, notInArray, sql } from '@workspace/db'
 import { DomainError } from '../lib/errors.ts'
 import { extractZip, ZipLimitError } from '../lib/zip.ts'
+import { proxyLoads, takeLeastLoaded } from './accounts.ts'
 
 const MB = 1024 * 1024
 /** TDesktop's key file: `key_` + data name + `s` (`key_datas` unless started with -key). */
@@ -199,10 +200,31 @@ export async function confirmImport(
     langCode: settings.get('telegram.desktop.langCode'),
   }
   const chosen = input.items.flatMap((d) => (d.decision === 'proxy' ? [d.proxyId] : []))
-  const free = new Set(await freeProxyIds(db, []))
-  for (const id of chosen) if (!free.has(id)) throw new DomainError(409, 'proxy_unavailable', 'Выбранный прокси не работает, отключён или уже занят')
-  if (new Set(chosen).size !== chosen.length) throw new DomainError(409, 'proxy_unavailable', 'Один прокси выбран для двух аккаунтов')
+  const loads = await proxyLoads(db)
+  for (const id of chosen) if (!loads.has(id)) throw new DomainError(409, 'proxy_unavailable', 'Выбранный прокси не работает или отключён')
   const autoPool = (await freeProxyIds(db, chosen)).reverse()
+
+  // explicit and «auto» first, then «reuse» spreads over what they left: it never takes a free proxy «auto» needs
+  const proxyOf = new Map<string, string | null>()
+  const take = (id: string) => {
+    loads.set(id, (loads.get(id) ?? 0) + 1)
+    return id
+  }
+  for (const d of input.items) {
+    if (d.decision === 'direct') proxyOf.set(d.id, null)
+    if (d.decision === 'proxy') proxyOf.set(d.id, take(d.proxyId))
+    if (d.decision === 'auto') {
+      const id = autoPool.pop()
+      if (!id) throw new DomainError(409, 'no_free_proxy', 'Свободных рабочих прокси не хватает на все аккаунты')
+      proxyOf.set(d.id, take(id))
+    }
+  }
+  for (const d of input.items) {
+    if (d.decision !== 'reuse') continue
+    const id = takeLeastLoaded(loads)
+    if (!id) throw new DomainError(409, 'no_usable_proxy', 'Нет ни одного рабочего прокси для переиспользования')
+    proxyOf.set(d.id, id)
+  }
 
   const result = { created: 0, skipped: 0, accountIds: [] as string[] }
   await db.transaction(async (tx) => {
@@ -215,12 +237,7 @@ export async function confirmImport(
         continue
       }
       if (item.duplicateOf) throw new DomainError(409, 'duplicate', `Аккаунт ${item.tgUserId} уже в панели — его можно только пропустить`)
-      let proxyId: string | null = null
-      if (decision.decision === 'proxy') proxyId = decision.proxyId
-      if (decision.decision === 'auto') {
-        proxyId = autoPool.pop() ?? null
-        if (!proxyId) throw new DomainError(409, 'no_free_proxy', 'Свободных рабочих прокси не хватает на все аккаунты')
-      }
+      const proxyId = proxyOf.get(decision.id) ?? null
       const [row] = await tx.select({ sessionEnc: importItems.sessionEnc }).from(importItems).where(eq(importItems.id, item.id))
       const [account] = await tx
         .insert(accounts)

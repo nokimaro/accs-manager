@@ -10,15 +10,15 @@ import {
   type ProxyDto,
   type UpdateProxyInput,
 } from '@workspace/shared/proxies'
-import { eq, getTableColumns } from '@workspace/db'
+import { eq, inArray, isNotNull } from '@workspace/db'
 import { DomainError } from '../lib/errors.ts'
 
 type ProxyRow = typeof proxies.$inferSelect
-type AccountRef = { id: string; label: string | null; phone: string | null; username: string | null } | null
+type AccountRef = ProxyDto['accounts'][number]
 
 const iso = (d: Date | null) => (d ? d.toISOString() : null)
 
-export function toProxyDto(row: ProxyRow, account: AccountRef): ProxyDto {
+export function toProxyDto(row: ProxyRow, bound: AccountRef[]): ProxyDto {
   return {
     id: row.id,
     source: row.source,
@@ -39,29 +39,32 @@ export function toProxyDto(row: ProxyRow, account: AccountRef): ProxyDto {
     expiresAt: iso(row.expiresAt),
     disabledAt: iso(row.disabledAt),
     createdAt: row.createdAt.toISOString(),
-    account,
+    accounts: bound,
   }
 }
 
-function selectWithAccount(db: Db) {
-  return db
-    .select({
-      proxy: getTableColumns(proxies),
-      account: { id: accounts.id, label: accounts.label, phone: accounts.phone, username: accounts.username },
-    })
-    .from(proxies)
-    .leftJoin(accounts, eq(accounts.proxyId, proxies.id))
+/** Accounts bound to the given proxies (all of them when `ids` is omitted), oldest first, by proxy id. */
+async function accountsByProxy(db: Db, ids?: string[]): Promise<Map<string, AccountRef[]>> {
+  const rows = await db
+    .select({ proxyId: accounts.proxyId, id: accounts.id, label: accounts.label, phone: accounts.phone, username: accounts.username })
+    .from(accounts)
+    .where(ids ? inArray(accounts.proxyId, ids) : isNotNull(accounts.proxyId))
+    .orderBy(accounts.createdAt)
+  const byProxy = new Map<string, AccountRef[]>()
+  for (const { proxyId, ...account } of rows) byProxy.set(proxyId!, [...(byProxy.get(proxyId!) ?? []), account])
+  return byProxy
 }
 
 export async function listProxies(db: Db): Promise<ProxyDto[]> {
-  const rows = await selectWithAccount(db).orderBy(proxies.createdAt)
-  return rows.map((r) => toProxyDto(r.proxy, r.account?.id ? r.account : null))
+  const rows = await db.select().from(proxies).orderBy(proxies.createdAt)
+  const bound = await accountsByProxy(db)
+  return rows.map((r) => toProxyDto(r, bound.get(r.id) ?? []))
 }
 
 export async function getProxy(db: Db, id: string): Promise<ProxyDto> {
-  const [row] = await selectWithAccount(db).where(eq(proxies.id, id))
+  const [row] = await db.select().from(proxies).where(eq(proxies.id, id))
   if (!row) throw new DomainError(404, 'not_found', 'Прокси не найден')
-  return toProxyDto(row.proxy, row.account?.id ? row.account : null)
+  return toProxyDto(row, (await accountsByProxy(db, [id])).get(id) ?? [])
 }
 
 const isUniqueViolation = (err: unknown) => (err as { cause?: { code?: string }; code?: string })?.cause?.code === '23505' || (err as { code?: string })?.code === '23505'
@@ -80,7 +83,7 @@ export async function createProxy(db: Db, cipher: Cipher, input: CreateProxyInpu
         tag: input.tag ?? null,
       })
       .returning()
-    return toProxyDto(row!, null)
+    return toProxyDto(row!, [])
   } catch (err) {
     if (isUniqueViolation(err)) throw new DomainError(409, 'proxy_exists', 'Такой прокси уже есть в пуле')
     throw err
@@ -134,8 +137,8 @@ export async function updateProxy(db: Db, id: string, input: UpdateProxyInput): 
   const set: Partial<typeof proxies.$inferInsert> = {}
   if (input.tag !== undefined) set.tag = input.tag
   if (input.disabled !== undefined && input.disabled !== (current.disabledAt !== null)) {
-    // a bound account would silently lose its proxy: change the account's proxy first
-    if (input.disabled && current.account) throw new DomainError(409, 'proxy_in_use', 'Прокси привязан к аккаунту — сначала смените прокси у аккаунта')
+    // bound accounts would silently lose their proxy: change the accounts' proxy first
+    if (input.disabled && current.accounts.length > 0) throw new DomainError(409, 'proxy_in_use', 'Прокси привязан к аккаунтам — сначала смените им прокси')
     set.disabledAt = input.disabled ? new Date() : null
   }
   if (Object.keys(set).length > 0) await db.update(proxies).set(set).where(eq(proxies.id, id))
@@ -144,7 +147,7 @@ export async function updateProxy(db: Db, id: string, input: UpdateProxyInput): 
 
 export async function deleteProxy(db: Db, id: string): Promise<void> {
   const proxy = await getProxy(db, id)
-  if (proxy.account) throw new DomainError(409, 'proxy_in_use', 'Прокси привязан к аккаунту — сначала смените прокси у аккаунта')
+  if (proxy.accounts.length > 0) throw new DomainError(409, 'proxy_in_use', 'Прокси привязан к аккаунтам — сначала смените им прокси')
   if (proxy.source === 'proxy_store') {
     throw new DomainError(409, 'managed_by_sync', 'Прокси из proxy-store управляется синхронизацией — его можно только отключить')
   }

@@ -59,20 +59,21 @@ describe('accounts api', () => {
     expect(updated).toMatchObject({ label: 'Основной', note: null })
   })
 
-  it('moves an account to a free proxy or to direct, and refuses busy or broken proxies', async () => {
+  it('moves an account to any working proxy, shared or not, or to direct, and refuses broken ones', async () => {
     const a = await insertAccount({ status: 'proxy_down', connectionMode: 'proxy' })
-    const free = await insertProxy()
     const busy = await insertProxy()
     await insertAccount({ connectionMode: 'proxy', proxyId: busy.id })
     const dead = await insertProxy({ status: 'dead' })
 
-    for (const proxyId of [busy.id, dead.id]) {
-      const res = await send(ta.app, `/api/accounts/${a.id}/proxy`, { cookie, method: 'PUT', body: { proxyId } })
-      expect(res.status).toBe(409)
-    }
-    const moved = await json<AccountDto>(await send(ta.app, `/api/accounts/${a.id}/proxy`, { cookie, method: 'PUT', body: { proxyId: free.id } }))
-    expect(moved).toMatchObject({ connectionMode: 'proxy', proxy: { id: free.id }, status: 'pending_check' })
+    const refused = await send(ta.app, `/api/accounts/${a.id}/proxy`, { cookie, method: 'PUT', body: { proxyId: dead.id } })
+    expect(refused.status).toBe(409)
+    const moved = await json<AccountDto>(await send(ta.app, `/api/accounts/${a.id}/proxy`, { cookie, method: 'PUT', body: { proxyId: busy.id } }))
+    expect(moved).toMatchObject({ connectionMode: 'proxy', proxy: { id: busy.id }, status: 'pending_check' })
     expect(ta.commands.sent).toEqual([{ type: 'account.sync', accountId: a.id }])
+    // «reuse» takes the least loaded proxy: the empty one over the shared one
+    const free = await insertProxy()
+    const reused = await json<AccountDto>(await send(ta.app, `/api/accounts/${a.id}/proxy`, { cookie, method: 'PUT', body: { proxyId: 'reuse' } }))
+    expect(reused.proxy!.id).toBe(free.id)
     const direct = await json<AccountDto>(await send(ta.app, `/api/accounts/${a.id}/proxy`, { cookie, method: 'PUT', body: { proxyId: null } }))
     expect(direct).toMatchObject({ connectionMode: 'direct', proxy: null })
   })

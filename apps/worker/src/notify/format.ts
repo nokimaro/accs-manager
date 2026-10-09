@@ -32,10 +32,10 @@ export function formatStatusMessage(account: AccountLike, status: AccountStatus,
   return `⚠️ ${accountTag(account)} ${what}${reason ? `: ${escapeHtml(reason)}` : ''}`
 }
 
-export function formatProxyExpiringMessage(rows: { host: string; port: number; expiresAt: Date; account: AccountLike | null }[]): string {
+export function formatProxyExpiringMessage(rows: { host: string; port: number; expiresAt: Date; accounts: AccountLike[] }[]): string {
   const lines = rows.map((r) => {
     const date = r.expiresAt.toLocaleDateString('ru-RU', { day: 'numeric', month: 'long', timeZone: 'UTC' })
-    return `• <code>${escapeHtml(`${r.host}:${r.port}`)}</code> до ${date}${r.account ? ` — ${accountTag(r.account)}` : ''}`
+    return `• <code>${escapeHtml(`${r.host}:${r.port}`)}</code> до ${date}${r.accounts.length ? ` — ${r.accounts.map(accountTag).join(', ')}` : ''}`
   })
   return `⏳ Скоро заканчивается оплата прокси:\n${lines.join('\n')}`
 }

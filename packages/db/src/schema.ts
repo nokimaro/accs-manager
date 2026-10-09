@@ -153,6 +153,7 @@ export const accounts = pgTable(
     clientProfile: text('client_profile', { enum: CLIENT_PROFILES }).notNull(),
     device: jsonb('device').$type<AccountDevice>().notNull(),
     connectionMode: text('connection_mode', { enum: CONNECTION_MODES }).notNull(),
+    /** several accounts may share one proxy («переиспользовать прокси») */
     proxyId: uuid('proxy_id').references(() => proxies.id, { onDelete: 'set null' }),
     status: text('status', { enum: ACCOUNT_STATUSES }).notNull().default('pending_check'),
     statusReason: text('status_reason'),
@@ -172,7 +173,7 @@ export const accounts = pgTable(
     createdAt: createdAt(),
     updatedAt: updatedAt(),
   },
-  (t) => [uniqueIndex('accounts_tg_user_id_key').on(t.tgUserId), uniqueIndex('accounts_proxy_id_key').on(t.proxyId), index('accounts_status_idx').on(t.status)],
+  (t) => [uniqueIndex('accounts_tg_user_id_key').on(t.tgUserId), index('accounts_proxy_id_idx').on(t.proxyId), index('accounts_status_idx').on(t.status)],
 )
 
 /** mtcute auth keys, encrypted with APP_ENCRYPTION_KEY (see apps/worker storage) */

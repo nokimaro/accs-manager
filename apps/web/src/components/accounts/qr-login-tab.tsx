@@ -9,7 +9,7 @@ import { Spinner } from '@workspace/ui/components/spinner'
 import { toast } from '@workspace/ui/components/toast'
 import QRCode from 'qrcode'
 import { PasswordInput } from '@/components/password-input'
-import { accountsQueryOptions, freeProxies } from '@/lib/accounts'
+import { accountsQueryOptions, freeProxies, REUSE_CHOICE, usableProxies } from '@/lib/accounts'
 import { api } from '@/lib/api'
 import { useAppEvent } from '@/lib/app-events'
 import { proxiesQueryOptions } from '@/lib/proxies'
@@ -29,14 +29,15 @@ export function QrLoginTab({ onDone }: { onDone: () => void }) {
   const queryClient = useQueryClient()
   const navigate = useNavigate()
   const proxies = useQuery(proxiesQueryOptions)
+  const usable = usableProxies(proxies.data?.items ?? [])
   const free = freeProxies(proxies.data?.items ?? [])
   const [route, setRoute] = React.useState<string | null>(null)
   const [qrId, setQrId] = React.useState<string | null>(null)
   const [progress, setProgress] = React.useState<QrProgress | null>(null)
   const [image, setImage] = React.useState<string | null>(null)
   const [password, setPassword] = React.useState('')
-  // «напрямую» only by an explicit choice: with no free proxy the admin has to pick it
-  const effectiveRoute = route ?? free[0]?.id ?? null
+  // a free proxy first, then the least loaded one; «напрямую» only by an explicit choice
+  const effectiveRoute = route ?? free[0]?.id ?? (usable.length > 0 ? REUSE_CHOICE.value : null)
   // the worker may publish the first QR before POST /qr answers: keep such events until the id is known
   const early = React.useRef(new Map<string, QrProgress>())
 
@@ -107,9 +108,9 @@ export function QrLoginTab({ onDone }: { onDone: () => void }) {
               id="qr-route"
               value={effectiveRoute}
               onChange={setRoute}
-              proxies={free}
-              special={[{ value: 'direct', label: 'Напрямую, без прокси' }]}
-              placeholder="Свободных прокси нет — выберите вариант"
+              proxies={usable}
+              special={[...(usable.length > 0 ? [REUSE_CHOICE] : []), { value: 'direct', label: 'Напрямую, без прокси' }]}
+              placeholder="Рабочих прокси нет — выберите вариант"
             />
             <FieldDescription>Новая сессия сразу пойдёт через выбранный прокси. Нужен свой api_id (Настройки → Telegram).</FieldDescription>
           </Field>

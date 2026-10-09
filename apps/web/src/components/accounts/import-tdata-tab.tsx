@@ -11,16 +11,18 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@
 import { toast } from '@workspace/ui/components/toast'
 import { WandSparklesIcon } from 'lucide-react'
 import { PasswordInput } from '@/components/password-input'
-import { accountsQueryOptions, freeProxies } from '@/lib/accounts'
+import { accountsQueryOptions, freeProxies, REUSE_CHOICE, usableProxies } from '@/lib/accounts'
 import { api, ApiError } from '@/lib/api'
 import { proxiesQueryOptions } from '@/lib/proxies'
 import { RouteSelect, type RouteChoice } from './route-select'
 
 const SPECIAL = [
   { value: 'auto', label: 'Свободный прокси автоматически' },
+  REUSE_CHOICE,
   { value: 'direct', label: 'Напрямую, без прокси' },
   { value: 'skip', label: 'Не добавлять' },
 ]
+const DECISIONS = new Set(SPECIAL.map((s) => s.value))
 
 export function ImportTdataTab({ onDone }: { onDone: () => void }) {
   const queryClient = useQueryClient()
@@ -28,7 +30,9 @@ export function ImportTdataTab({ onDone }: { onDone: () => void }) {
   const [passcode, setPasscode] = React.useState('')
   const [choices, setChoices] = React.useState<Record<string, RouteChoice>>({})
   const proxies = useQuery(proxiesQueryOptions)
+  const usable = usableProxies(proxies.data?.items ?? [])
   const free = freeProxies(proxies.data?.items ?? [])
+  const special = usable.length > 0 ? SPECIAL : SPECIAL.filter((s) => s.value !== REUSE_CHOICE.value)
 
   const upload = useMutation({
     mutationFn: () => {
@@ -48,7 +52,7 @@ export function ImportTdataTab({ onDone }: { onDone: () => void }) {
     mutationFn: () => {
       const items: ConfirmImportInput['items'] = batch!.items.map((i) => {
         const choice = choices[i.id] ?? 'skip'
-        if (choice === 'auto' || choice === 'direct' || choice === 'skip') return { id: i.id, decision: choice }
+        if (choice === 'auto' || choice === 'reuse' || choice === 'direct' || choice === 'skip') return { id: i.id, decision: choice }
         return { id: i.id, decision: 'proxy', proxyId: choice }
       })
       return api<ConfirmImportResult>(`/imports/${batch!.id}/confirm`, { method: 'POST', json: { items } })
@@ -63,10 +67,10 @@ export function ImportTdataTab({ onDone }: { onDone: () => void }) {
 
   const uploadError = upload.error instanceof ApiError ? upload.error : null
   const passcodeError = uploadError?.body?.error === 'passcode_required' || uploadError?.body?.error === 'passcode_invalid' ? uploadError.message : undefined
-  const chosen = batch ? batch.items.map((i) => choices[i.id]).filter((c): c is string => !!c && !['auto', 'direct', 'skip'].includes(c)) : []
-  const sameProxyTwice = new Set(chosen).size !== chosen.length
+  // a proxy picked by hand is no longer free for «auto» (several accounts may share it)
+  const chosen = new Set(batch ? batch.items.map((i) => choices[i.id]).filter((c): c is string => !!c && !DECISIONS.has(c)) : [])
   const autoCount = batch ? batch.items.filter((i) => choices[i.id] === 'auto').length : 0
-  const notEnough = autoCount > free.length - chosen.length
+  const notEnough = autoCount > free.filter((p) => !chosen.has(p.id)).length
   const toAdd = batch ? batch.items.filter((i) => choices[i.id] && choices[i.id] !== 'skip').length : 0
 
   if (!batch) {
@@ -157,8 +161,8 @@ export function ImportTdataTab({ onDone }: { onDone: () => void }) {
                     aria-label={`Подключение аккаунта ${item.tgUserId}`}
                     value={choices[item.id] ?? 'skip'}
                     onChange={(value) => setChoices((c) => ({ ...c, [item.id]: value }))}
-                    proxies={free}
-                    special={item.duplicateOf ? SPECIAL.filter((s) => s.value === 'skip') : SPECIAL}
+                    proxies={usable}
+                    special={item.duplicateOf ? SPECIAL.filter((s) => s.value === 'skip') : special}
                     disabled={!!item.duplicateOf}
                   />
                 </TableCell>
@@ -170,12 +174,16 @@ export function ImportTdataTab({ onDone }: { onDone: () => void }) {
       {free.length === 0 && (
         <Alert>
           <AlertTitle>Свободных рабочих прокси нет</AlertTitle>
-          <AlertDescription>Добавьте прокси на странице «Прокси» или явно выберите «Напрямую» — тогда Telegram увидит IP сервера.</AlertDescription>
+          <AlertDescription>
+            {usable.length > 0
+              ? 'Выберите «Переиспользовать прокси» — аккаунт сядет на прокси, где меньше всего аккаунтов, — или добавьте прокси на странице «Прокси».'
+              : 'Добавьте прокси на странице «Прокси» или явно выберите «Напрямую» — тогда Telegram увидит IP сервера.'}
+          </AlertDescription>
         </Alert>
       )}
-      {(sameProxyTwice || notEnough) && (
+      {notEnough && (
         <Alert variant="destructive">
-          <AlertDescription>{sameProxyTwice ? 'Один прокси выбран для двух аккаунтов.' : `Для «автоматически» не хватает свободных прокси: нужно ${autoCount}.`}</AlertDescription>
+          <AlertDescription>Для «автоматически» не хватает свободных прокси: нужно {autoCount}. Остальным можно выбрать «Переиспользовать прокси».</AlertDescription>
         </Alert>
       )}
       {confirm.error && (
@@ -193,7 +201,7 @@ export function ImportTdataTab({ onDone }: { onDone: () => void }) {
         >
           Другой архив
         </Button>
-        <Button disabled={toAdd === 0 || sameProxyTwice || notEnough || confirm.isPending} onClick={() => confirm.mutate()}>
+        <Button disabled={toAdd === 0 || notEnough || confirm.isPending} onClick={() => confirm.mutate()}>
           {confirm.isPending && <Spinner data-icon="inline-start" />}
           Добавить {toAdd}
         </Button>

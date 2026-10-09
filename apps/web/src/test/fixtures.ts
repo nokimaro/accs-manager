@@ -22,7 +22,7 @@ export function proxyFixture(over: Partial<ProxyDto> = {}): ProxyDto {
     expiresAt: null,
     disabledAt: null,
     createdAt: '2026-10-03T00:00:00.000Z',
-    account: null,
+    accounts: [],
     ...over,
   }
 }

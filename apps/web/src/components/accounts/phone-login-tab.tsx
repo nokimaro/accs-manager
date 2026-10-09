@@ -9,7 +9,7 @@ import { Input } from '@workspace/ui/components/input'
 import { Spinner } from '@workspace/ui/components/spinner'
 import { toast } from '@workspace/ui/components/toast'
 import { PasswordInput } from '@/components/password-input'
-import { accountsQueryOptions, freeProxies } from '@/lib/accounts'
+import { accountsQueryOptions, freeProxies, REUSE_CHOICE, usableProxies } from '@/lib/accounts'
 import { api, ApiError, errorText } from '@/lib/api'
 import { useAppEvent } from '@/lib/app-events'
 import { proxiesQueryOptions } from '@/lib/proxies'
@@ -70,6 +70,7 @@ export function PhoneLoginTab({ onDone }: { onDone: () => void }) {
   const queryClient = useQueryClient()
   const navigate = useNavigate()
   const proxies = useQuery(proxiesQueryOptions)
+  const usable = usableProxies(proxies.data?.items ?? [])
   const free = freeProxies(proxies.data?.items ?? [])
   const [route, setRoute] = React.useState<string | null>(null)
   const [phone, setPhone] = React.useState('')
@@ -81,8 +82,8 @@ export function PhoneLoginTab({ onDone }: { onDone: () => void }) {
   const [password, setPassword] = React.useState('')
   // a resend asked for and not answered yet: no second request from a double click
   const [resendPending, setResendPending] = React.useState(false)
-  // «напрямую» only by an explicit choice: with no free proxy the admin has to pick it
-  const effectiveRoute = route ?? free[0]?.id ?? null
+  // a free proxy first, then the least loaded one; «напрямую» only by an explicit choice
+  const effectiveRoute = route ?? free[0]?.id ?? (usable.length > 0 ? REUSE_CHOICE.value : null)
   // the worker may answer before POST /phone-login does: keep such events until the id is known
   const early = React.useRef(new Map<string, PhoneProgress>())
   const secondsLeft = useSecondsLeft(resendAt)
@@ -174,9 +175,9 @@ export function PhoneLoginTab({ onDone }: { onDone: () => void }) {
               id="phone-route"
               value={effectiveRoute}
               onChange={setRoute}
-              proxies={free}
-              special={[{ value: 'direct', label: 'Напрямую, без прокси' }]}
-              placeholder="Свободных прокси нет — выберите вариант"
+              proxies={usable}
+              special={[...(usable.length > 0 ? [REUSE_CHOICE] : []), { value: 'direct', label: 'Напрямую, без прокси' }]}
+              placeholder="Рабочих прокси нет — выберите вариант"
             />
           </Field>
           <Field data-invalid={phoneError ? true : undefined}>

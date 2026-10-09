@@ -4,6 +4,7 @@ import { createFileRoute } from '@tanstack/react-router'
 import { createColumnHelper } from '@tanstack/react-table'
 import { accountTitle } from '@workspace/shared/accounts'
 import { proxySourceLabels, type ProxyDto } from '@workspace/shared/proxies'
+import { pluralRu } from '@workspace/shared/settings'
 import { Alert, AlertDescription, AlertTitle } from '@workspace/ui/components/alert'
 import {
   AlertDialog,
@@ -53,11 +54,18 @@ export const Route = createFileRoute('/_authed/proxies')({
 
 const col = createColumnHelper<ClientTableFeatures, ProxyDto>()
 type SourceFilter = 'all' | ProxyDto['source']
+/** free: no account; shared: a reused proxy, more than one account */
+type UsageFilter = 'all' | 'free' | 'shared'
+const USAGE: Record<UsageFilter, (p: ProxyDto) => boolean> = {
+  all: () => true,
+  free: (p) => p.accounts.length === 0,
+  shared: (p) => p.accounts.length > 1,
+}
 
 function matches(p: ProxyDto, query: string): boolean {
   if (!query) return true
   const q = query.toLowerCase()
-  return [p.host, `${p.host}:${p.port}`, p.username, p.tag, p.account && accountTitle(p.account), p.account?.phone].some((v) => v?.toLowerCase().includes(q))
+  return [p.host, `${p.host}:${p.port}`, p.username, p.tag, ...p.accounts.flatMap((a) => [accountTitle(a), a.phone])].some((v) => v?.toLowerCase().includes(q))
 }
 
 function ProxiesPage() {
@@ -66,6 +74,7 @@ function ProxiesPage() {
   const { data: sync } = useSuspenseQuery(proxySyncStatusQueryOptions)
   const [statusFilter, setStatusFilter] = React.useState<ProxyStatusFilter>('all')
   const [sourceFilter, setSourceFilter] = React.useState<SourceFilter>('all')
+  const [usageFilter, setUsageFilter] = React.useState<UsageFilter>('all')
   const [query, setQuery] = React.useState('')
   const [deleteTarget, setDeleteTarget] = React.useState<ProxyDto | null>(null)
 
@@ -99,7 +108,7 @@ function ProxiesPage() {
 
   const statuses = PROXY_STATUS_FILTERS[statusFilter] as readonly string[] | null
   const rows = data.items.filter(
-    (p) => (!statuses || statuses.includes(p.status)) && (sourceFilter === 'all' || p.source === sourceFilter) && matches(p, query),
+    (p) => (!statuses || statuses.includes(p.status)) && (sourceFilter === 'all' || p.source === sourceFilter) && USAGE[usageFilter](p) && matches(p, query),
   )
 
   const columns = React.useMemo(
@@ -148,11 +157,28 @@ function ProxiesPage() {
           cell: (info) => info.getValue() ?? '—',
         }),
         col.accessor('expiresAt', { header: 'Оплачен до', cell: (info) => formatDate(info.getValue()) }),
-        col.accessor('account', {
-          header: 'Аккаунт',
+        col.accessor('accounts', {
+          header: 'Аккаунты',
           cell: (info) => {
-            const a = info.getValue()
-            return a ? <AccountName id={a.id} account={a} /> : <span className="text-muted-foreground">свободен</span>
+            const bound = info.getValue()
+            if (bound.length === 0) return <span className="text-muted-foreground">свободен</span>
+            return (
+              <span className="flex items-start gap-1.5">
+                <span className="flex flex-col gap-1.5">
+                  {bound.map((a) => (
+                    <AccountName key={a.id} id={a.id} account={a} />
+                  ))}
+                </span>
+                {bound.length > 1 && (
+                  <Tooltip>
+                    <TooltipTrigger render={<span />}>
+                      <Badge variant="outline">×{bound.length}</Badge>
+                    </TooltipTrigger>
+                    <TooltipContent>Прокси общий: через него {pluralRu(bound.length, ['подключён', 'подключены', 'подключены'])} {bound.length} {pluralRu(bound.length, ['аккаунт', 'аккаунта', 'аккаунтов'])}</TooltipContent>
+                  </Tooltip>
+                )}
+              </span>
+            )
           },
         }),
         col.accessor('tag', { header: 'Метка', cell: (info) => info.getValue() ?? '—' }),
@@ -180,11 +206,11 @@ function ProxiesPage() {
                     <DropdownMenuItem disabled={p.status === 'provisioning' || p.status === 'expired'} onClick={() => check.mutate(p)}>
                       Проверить сейчас
                     </DropdownMenuItem>
-                    <DropdownMenuItem disabled={p.disabledAt === null && p.account !== null} onClick={() => toggle.mutate(p)}>
+                    <DropdownMenuItem disabled={p.disabledAt === null && p.accounts.length > 0} onClick={() => toggle.mutate(p)}>
                       {p.disabledAt ? 'Включить' : 'Отключить'}
                     </DropdownMenuItem>
                     {p.source === 'manual' && (
-                      <DropdownMenuItem variant="destructive" disabled={p.account !== null} onClick={() => setDeleteTarget(p)}>
+                      <DropdownMenuItem variant="destructive" disabled={p.accounts.length > 0} onClick={() => setDeleteTarget(p)}>
                         Удалить
                       </DropdownMenuItem>
                     )}
@@ -242,6 +268,14 @@ function ProxiesPage() {
             <ToggleGroupItem value="all">Все</ToggleGroupItem>
             <ToggleGroupItem value="manual">Вручную</ToggleGroupItem>
             <ToggleGroupItem value="proxy_store">proxy-store</ToggleGroupItem>
+          </ToggleGroup>
+        </Field>
+        <Field className="w-auto">
+          <FieldLabel>Аккаунты</FieldLabel>
+          <ToggleGroup variant="outline" value={[usageFilter]} onValueChange={(v) => v[0] && setUsageFilter(v[0] as UsageFilter)}>
+            <ToggleGroupItem value="all">Все</ToggleGroupItem>
+            <ToggleGroupItem value="free">Свободные</ToggleGroupItem>
+            <ToggleGroupItem value="shared">Общие</ToggleGroupItem>
           </ToggleGroup>
         </Field>
         <Field className="w-64">

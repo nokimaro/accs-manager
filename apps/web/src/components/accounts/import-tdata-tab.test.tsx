@@ -96,4 +96,32 @@ describe('ImportTdataTab', () => {
     expect(screen.getByLabelText('Подключение аккаунта 111')).toHaveTextContent('Не добавлять')
     expect(screen.getByRole('button', { name: 'Добавить 0' })).toBeDisabled()
   })
+
+  it('with every proxy taken still defaults to skip, and offers to reuse the least loaded one', async () => {
+    const busy = proxyFixture({ accounts: [{ id: 'x', label: 'другой', phone: null, username: null }] })
+    const fetchMock = vi.fn(async (url: string, init?: RequestInit) => {
+      if (url === '/api/proxies') return json({ items: [busy] })
+      if (url === '/api/imports' && init?.method === 'POST') return json(batch, 201)
+      return json({ created: 1, skipped: 1 })
+    })
+    vi.stubGlobal('fetch', fetchMock)
+    const onDone = vi.fn()
+    const user = userEvent.setup()
+    renderWithClient(<ImportTdataTab onDone={onDone} />)
+    await user.upload(screen.getByLabelText('Архив tdata (.zip)'), zip())
+    await user.click(screen.getByRole('button', { name: 'Загрузить и проверить' }))
+
+    expect(await screen.findByText('Свободных рабочих прокси нет')).toBeInTheDocument()
+    expect(screen.getByText(/Выберите «Переиспользовать прокси»/)).toBeInTheDocument()
+    expect(screen.getByLabelText('Подключение аккаунта 111')).toHaveTextContent('Не добавлять')
+
+    await user.click(screen.getByLabelText('Подключение аккаунта 111'))
+    // a taken proxy can be picked by hand too, showing how many accounts it carries
+    expect(await screen.findByRole('option', { name: /194\.53\.188\.10:50101 .*· 1 акк\./ })).toBeInTheDocument()
+    await user.click(screen.getByRole('option', { name: 'Переиспользовать прокси — наименее загруженный' }))
+    await user.click(screen.getByRole('button', { name: 'Добавить 1' }))
+    await waitFor(() => expect(onDone).toHaveBeenCalled())
+    const confirm = fetchMock.mock.calls.find(([url]) => String(url).endsWith('/confirm')) as unknown as [string, RequestInit]
+    expect(JSON.parse(String(confirm[1].body)).items[0]).toEqual({ id: batch.items[0]!.id, decision: 'reuse' })
+  })
 })
