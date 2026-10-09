@@ -61,6 +61,7 @@ const sessionFactory: SessionFactory = (account, ctx) => {
     storage: createAccountStorage(database.pool, database.db, cipher, account.id),
     proxy: ctx.proxy,
     importSession: ctx.importSession,
+    online: settings.get('worker.keepOnline'),
   })
 }
 const notifier = createNotifier(deps, fetch)

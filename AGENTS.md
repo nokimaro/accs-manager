@@ -151,6 +151,18 @@ CLI (`apps/api/src/cli.ts`): `admin:create|admin:reset-password|admin:disable --
 - После `connect()` + `getMe()` обязательно `client.notifyLoggedIn(me.raw)` (`telegram/mtcute-session.ts`):
   без этого не запускается цикл обновлений и живые сообщения не приходят. `client.start()` не использовать —
   на мёртвой сессии он уходит в интерактивный вход.
+- «В сети» (`worker.keepOnline`, по умолчанию да): после подключения — `client.setOnline(true)` (mtcute каждые 4 мин
+  шлёт `account.updateStatus(offline=false)`), при остановке — `offline=true` (не дольше 3 с). Без этого аккаунт для
+  Telegram «был давно», и Telegram Gateway не доставляет ему коды (`PHONE_NUMBER_NOT_AVAILABLE`). Проверено на проде
+  2026-10-09: подключение, `updates.getState`/`getDialogs`/`getContacts`/`help.getConfig` и `updateStatus(offline=true)`
+  без выхода в сеть активностью не считаются. После выхода в сеть номер доступен через ~10 с и остаётся доступным
+  не меньше часа. Отказы раньше времени не кэшируются. `delivered`/`read` Gateway ставит, только пока аккаунт
+  в сети; код, пришедший «не в сети», Gateway считает недоставленным (`expired`).
+- «Отправить тестовый код» (карточка аккаунта): API вызывает Gateway `sendVerificationMessage` на номер аккаунта —
+  каждый раз новая платная отправка, без `checkSendAbility` (`services/test-code.ts`, `lib/telegram-gateway.ts`).
+  Токен — секрет `gateway.token`. Код приходит в @VerificationCodes и в ленту обычным путём; статус доставки
+  карточка опрашивает `GET /accounts/:id/test-code/:requestId`. У Gateway флуд на номер: ~минута между запросами,
+  после серии — почти час (`FLOOD_WAIT_N`, считаются и отказы).
 - Ошибки Telegram классифицирует `telegram/errors.ts` (unauthorized / banned / frozen / network / other) → статусы
   аккаунта; смена статуса пишется в аудит как `system` и уходит уведомлением. Заморозка — `help.getAppConfig`
   (`freeze_since_date`/`freeze_until_date`/`freeze_appeal_url`).

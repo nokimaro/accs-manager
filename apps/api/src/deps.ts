@@ -15,6 +15,8 @@ export interface AppDeps {
   /** asks the worker to act (check a proxy, start an account, list sessions) */
   commands: CommandClient
   logger: Logger
+  /** outbound HTTP (Telegram Gateway); tests pass a fake */
+  fetch?: typeof fetch
   /** absolute path to the built SPA; static serving is skipped when undefined */
   webDistDir?: string
   /** SSE keep-alive interval; the session is re-validated on every beat (default 25 s) */

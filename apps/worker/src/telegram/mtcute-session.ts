@@ -16,7 +16,15 @@ export interface MtcuteSessionOptions {
   proxy: ProxyEndpoint | null
   /** string session from a tdata import, applied once before connecting */
   importSession: string | null
+  /**
+   * mark the account online while connected, like an open Telegram Desktop (worker.keepOnline): a connected
+   * client alone stays «last seen long ago», and Telegram Gateway refuses such numbers (PHONE_NUMBER_NOT_AVAILABLE)
+   */
+  online: boolean
 }
+
+/** going offline on stop is a courtesy: a dead connection must not hold the stop up */
+const OFFLINE_TIMEOUT_MS = 3_000
 
 const iso = (seconds: number) => new Date(seconds * 1000).toISOString()
 
@@ -59,6 +67,8 @@ export function createMtcuteSession(options: MtcuteSessionOptions): TelegramSess
       // without it no live messages arrive. start() itself is not used: on a dead session it falls back
       // to an interactive login.
       await client.notifyLoggedIn(me.raw)
+      // account.updateStatus(offline=false) now and every 4 minutes (mtcute's timer)
+      if (options.online) await client.setOnline(true)
       return toProfile(me)
     },
     profile,
@@ -169,6 +179,12 @@ export function createMtcuteSession(options: MtcuteSessionOptions): TelegramSess
       await client.logOut()
     },
     async stop() {
+      if (options.online) {
+        let timer: NodeJS.Timeout | undefined
+        const timeout = new Promise<void>((resolve) => (timer = setTimeout(resolve, OFFLINE_TIMEOUT_MS)))
+        await Promise.race([client.setOnline(false).catch(() => {}), timeout])
+        clearTimeout(timer)
+      }
       await client.destroy()
     },
   }

@@ -17,6 +17,7 @@ export type SettingEffect = 'immediate' | 'new_connections' | 'restart'
 export type SettingGroupId =
   | 'telegram'
   | 'notifications'
+  | 'gateway'
   | 'proxy'
   | 'proxyStore'
   | 'worker'

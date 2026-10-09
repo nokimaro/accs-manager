@@ -95,6 +95,22 @@ export const accountSessionDto = z.object({
 })
 export type AccountSessionDto = z.output<typeof accountSessionDto>
 
+// ---- test code (Telegram Gateway) ----
+
+/** Gateway's delivery states: `delivered` and `read` are reported only while the account is online. */
+export const GATEWAY_DELIVERY_STATUSES = ['sent', 'delivered', 'read', 'expired', 'revoked'] as const
+export type GatewayDeliveryStatus = (typeof GATEWAY_DELIVERY_STATUSES)[number]
+
+/** A test code sent through Telegram Gateway: the code itself arrives in @VerificationCodes like any other. */
+export const testCodeDto = z.object({
+  requestId: z.string(),
+  delivery: z.enum(GATEWAY_DELIVERY_STATUSES).nullable(),
+  /** what the request cost, in Gateway credits */
+  cost: z.number().nullable(),
+  remainingBalance: z.number().nullable(),
+})
+export type TestCodeDto = z.output<typeof testCodeDto>
+
 // ---- tdata import ----
 
 export const importItemDto = z.object({

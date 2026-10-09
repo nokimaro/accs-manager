@@ -7,9 +7,11 @@ import type { AppEnv } from '../deps.ts'
 import { DomainError } from '../lib/errors.ts'
 import { audited } from '../middleware/audit.ts'
 import { deleteAccountData, getAccount, listAccounts, pauseAccount, resumeAccount, setAccountProxy, updateAccount } from '../services/accounts.ts'
+import { sendTestCode, testCodeStatus } from '../services/test-code.ts'
 import { validationHook } from './validation.ts'
 
 const idParam = z.object({ id: z.uuid() })
+const testCodeParam = z.object({ id: z.uuid(), requestId: z.string().regex(/^\d{1,32}$/) })
 const sessionParam = z.object({ id: z.uuid(), hash: z.string().regex(/^-?\d+$/) })
 const NOT_RUNNING = new DomainError(409, 'not_running', 'Аккаунт сейчас не подключён к Telegram')
 
@@ -66,6 +68,14 @@ export const accountRoutes = new Hono<AppEnv>()
     return c.body(null, 204)
   })
   // the list of the owner's devices is sensitive: reading it is audited too
+  // a paid Telegram Gateway message to the account's own number: the code arrives in @VerificationCodes
+  .post('/accounts/:id/test-code', audited('account.test_code', { target: ['account', 'id'] }), zValidator('param', idParam, validationHook), async (c) => {
+    return c.json(await sendTestCode(c.get('deps'), c.req.valid('param').id))
+  })
+  .get('/accounts/:id/test-code/:requestId', zValidator('param', testCodeParam, validationHook), async (c) => {
+    const { id, requestId } = c.req.valid('param')
+    return c.json(await testCodeStatus(c.get('deps'), id, requestId))
+  })
   .get('/accounts/:id/sessions', audited('account.sessions.read', { target: ['account', 'id'] }), zValidator('param', idParam, validationHook), async (c) => {
     const result = await c.get('deps').commands.call<AccountSessionsResult>({ type: 'account.sessions', accountId: c.req.valid('param').id })
     if ('error' in result) throw NOT_RUNNING

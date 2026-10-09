@@ -14,6 +14,7 @@ import { AccountSessions } from '@/components/accounts/account-sessions'
 import { AccountStatusBadge } from '@/components/accounts/account-status-badge'
 import { CloudPasswordCard } from '@/components/accounts/cloud-password-card'
 import { DeleteAccountDialog } from '@/components/accounts/delete-account-dialog'
+import { TestCodePanel } from '@/components/accounts/test-code-panel'
 import { CodesTable } from '@/components/codes/codes-table'
 import { PageHeader } from '@/components/page-header'
 import { ProxyStatusBadge } from '@/components/proxies/proxy-status-badge'
@@ -210,7 +211,8 @@ function AccountPage() {
             </Button>
           </CardAction>
         </CardHeader>
-        <CardContent>
+        <CardContent className="flex flex-col gap-4">
+          <TestCodePanel account={a} />
           {codes.data ? <CodesTable items={codes.data.items} empty="Кодов пока не было" /> : <p className="text-muted-foreground text-sm">Загрузка…</p>}
         </CardContent>
       </Card>
