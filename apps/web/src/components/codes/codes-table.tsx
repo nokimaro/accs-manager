@@ -2,7 +2,7 @@ import type { CodeDto } from '@workspace/shared/accounts'
 import { Badge } from '@workspace/ui/components/badge'
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@workspace/ui/components/table'
 import { AccountName } from '@/components/accounts/account-name'
-import { formatDateTime, formatRelative } from '@/lib/format'
+import { TimeAgo } from '@/components/time-ago'
 import { CopyCodeButton } from './copy-code-button'
 
 /** Messages from @VerificationCodes, newest first. `showAccount` — for the shared feed. */
@@ -22,9 +22,9 @@ export function CodesTable({ items, showAccount, empty, fresh }: { items: CodeDt
           {items.length ? (
             items.map((c) => (
               <TableRow key={c.id}>
-                <TableCell className="whitespace-nowrap" title={formatDateTime(c.date)}>
+                <TableCell>
                   <span className="flex items-center gap-2">
-                    {formatRelative(c.date)}
+                    <TimeAgo iso={c.date} />
                     {fresh?.has(c.id) && <Badge>новый</Badge>}
                   </span>
                 </TableCell>

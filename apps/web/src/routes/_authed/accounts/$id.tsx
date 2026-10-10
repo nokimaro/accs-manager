@@ -18,10 +18,11 @@ import { DeleteAccountDialog } from '@/components/accounts/delete-account-dialog
 import { TestCodePanel } from '@/components/accounts/test-code-panel'
 import { CodesTable } from '@/components/codes/codes-table'
 import { PageHeader } from '@/components/page-header'
+import { TimeAgo } from '@/components/time-ago'
 import { ProxyStatusBadge } from '@/components/proxies/proxy-status-badge'
 import { accountQueryOptions, accountsQueryOptions, codesQueryOptions } from '@/lib/accounts'
 import { api, ApiError } from '@/lib/api'
-import { formatDate, formatDateTime, formatRelative } from '@/lib/format'
+import { formatDate } from '@/lib/format'
 import { proxiesQueryOptions } from '@/lib/proxies'
 import { pageTitle } from '@/lib/title'
 
@@ -70,9 +71,7 @@ function ProfileCard({ a }: { a: AccountDto }) {
           <Row label="Статус">
             <span className="flex flex-wrap items-center gap-2">
               <AccountStatusBadge status={a.status} />
-              <span className="text-muted-foreground" title={formatDateTime(a.statusChangedAt)}>
-                {formatRelative(a.statusChangedAt)}
-              </span>
+              <TimeAgo iso={a.statusChangedAt} />
             </span>
           </Row>
           {a.statusReason && <Row label="Причина">{a.statusReason}</Row>}
@@ -89,7 +88,7 @@ function ProfileCard({ a }: { a: AccountDto }) {
           </Row>
           <Row label="Дата-центр">{a.dcId ? `DC${a.dcId}` : '—'}</Row>
           <Row label="На связи">
-            <span title={formatDateTime(a.lastOkAt)}>{formatRelative(a.lastOkAt)}</span>
+            <TimeAgo iso={a.lastOkAt} />
           </Row>
           <Row label="Добавлен">
             {formatDate(a.createdAt)} · {{ tdata: 'из tdata', qr: 'вход по QR', phone: 'вход по номеру' }[a.source]}

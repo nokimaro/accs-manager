@@ -26,7 +26,7 @@ import { PageHeader } from '@/components/page-header'
 import { ProxyStatusBadge } from '@/components/proxies/proxy-status-badge'
 import { ACCOUNT_STATUS_FILTERS, accountsQueryOptions, type AccountStatusFilter } from '@/lib/accounts'
 import { api, ApiError } from '@/lib/api'
-import { formatDateTime, formatRelative } from '@/lib/format'
+import { TimeAgo } from '@/components/time-ago'
 import { titleHead } from '@/lib/title'
 
 export const Route = createFileRoute('/_authed/accounts/')({
@@ -77,10 +77,8 @@ function AccountsPage() {
             if (!a.lastCodeAt) return <span className="text-muted-foreground">—</span>
             return (
               <span className="flex flex-col items-start gap-1">
-                {a.lastCode ? <CopyCodeButton code={a.lastCode} size="default" className="text-base" /> : <Badge variant="outline">без кода</Badge>}
-                <span className="text-muted-foreground text-xs" title={formatDateTime(a.lastCodeAt)}>
-                  {formatRelative(a.lastCodeAt)}
-                </span>
+                {a.lastCode ? <CopyCodeButton code={a.lastCode} /> : <Badge variant="outline">без кода</Badge>}
+                <TimeAgo iso={a.lastCodeAt} className="text-xs" />
               </span>
             )
           },
@@ -102,7 +100,7 @@ function AccountsPage() {
             )
           },
         }),
-        col.accessor('lastOkAt', { header: 'На связи', cell: (info) => <span title={formatDateTime(info.getValue())} className="text-muted-foreground text-sm">{formatRelative(info.getValue())}</span> }),
+        col.accessor('lastOkAt', { header: 'На связи', cell: (info) => <TimeAgo iso={info.getValue()} /> }),
         col.accessor('source', { header: 'Источник', cell: (info) => accountSourceLabels[info.getValue()] }),
         col.display({
           id: 'actions',

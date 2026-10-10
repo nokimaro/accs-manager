@@ -34,11 +34,12 @@ import { MoreHorizontalIcon, RefreshCwIcon } from 'lucide-react'
 import { DataTable, type ClientTableFeatures } from '@/components/data-table'
 import { PageHeader } from '@/components/page-header'
 import { AccountName } from '@/components/accounts/account-name'
+import { TimeAgo } from '@/components/time-ago'
 import { AddProxyDialog } from '@/components/proxies/add-proxy-dialog'
 import { ImportProxiesDialog } from '@/components/proxies/import-proxies-dialog'
 import { ProxyStatusBadge } from '@/components/proxies/proxy-status-badge'
 import { api, ApiError } from '@/lib/api'
-import { formatDate, formatDateTime, formatRelative } from '@/lib/format'
+import { formatDate, formatRelative } from '@/lib/format'
 import { PROXY_STATUS_FILTERS, proxiesQueryOptions, proxySyncStatusQueryOptions, type ProxyStatusFilter } from '@/lib/proxies'
 import { titleHead } from '@/lib/title'
 
@@ -184,11 +185,7 @@ function ProxiesPage() {
         col.accessor('tag', { header: 'Метка', cell: (info) => info.getValue() ?? '—' }),
         col.accessor('lastCheckAt', {
           header: 'Проверен',
-          cell: (info) => (
-            <span title={formatDateTime(info.getValue())} className="text-muted-foreground text-sm">
-              {formatRelative(info.getValue())}
-            </span>
-          ),
+          cell: (info) => <TimeAgo iso={info.getValue()} />,
         }),
         col.display({
           id: 'actions',

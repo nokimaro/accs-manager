@@ -86,9 +86,9 @@ export function AccountSessions({ accountId, running }: { accountId: string; run
                     {!s.official && <Badge variant="outline">неофициальное</Badge>}
                   </span>
                 </TableCell>
-                <TableCell className="text-sm">{[s.deviceModel, s.platform, s.systemVersion].filter(Boolean).join(', ')}</TableCell>
-                <TableCell className="text-sm">{[s.ip, s.country].filter(Boolean).join(' · ')}</TableCell>
-                <TableCell className="text-sm" title={`вход: ${formatDateTime(s.createdAt)}`}>
+                <TableCell>{[s.deviceModel, s.platform, s.systemVersion].filter(Boolean).join(', ')}</TableCell>
+                <TableCell>{[s.ip, s.country].filter(Boolean).join(' · ')}</TableCell>
+                <TableCell title={`вход: ${formatDateTime(s.createdAt)}`}>
                   {formatRelative(s.activeAt)}
                 </TableCell>
                 <TableCell className="text-right">
