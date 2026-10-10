@@ -7,10 +7,14 @@ import { createNotifier, NOTIFY_QUEUE, type NotifyJob } from '../src/notify/noti
 import { setupWorker, type TestWorker } from './helpers.ts'
 
 describe('message format', () => {
-  it('is one short line: phone, then the code, both monospace', () => {
-    expect(formatCodeMessage({ phone: '77001234567', label: 'main', username: null, tgUserId: 1 }, '575571', 'Your code is 575571')).toBe(
+  it('is one short line: phone (label), then the code, both monospace', () => {
+    expect(formatCodeMessage({ phone: '77066843426', label: 'OLIMP-1', username: null, tgUserId: 1 }, '437610', 'Your code is 437610')).toBe(
+      '<code>+77066843426</code> (OLIMP-1) получен код <code>437610</code>',
+    )
+    expect(formatCodeMessage({ phone: '77001234567', label: null, username: null, tgUserId: 1 }, '575571', 'Your code is 575571')).toBe(
       '<code>+77001234567</code> получен код <code>575571</code>',
     )
+    expect(formatCodeMessage({ phone: '77001234567', label: '<b>', username: null, tgUserId: 1 }, '575571', '')).toBe('<code>+77001234567</code> (&lt;b&gt;) получен код <code>575571</code>')
     expect(formatCodeMessage({ phone: null, label: null, username: 'nox', tgUserId: 1 }, '1234', '')).toBe('<code>@nox</code> получен код <code>1234</code>')
     expect(formatCodeMessage({ phone: null, label: 'a<b>', username: null, tgUserId: 1 }, null, 'Hi <there>')).toBe('<code>a&lt;b&gt;</code> получено сообщение: Hi &lt;there&gt;')
   })

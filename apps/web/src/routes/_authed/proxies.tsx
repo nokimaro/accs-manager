@@ -32,6 +32,7 @@ import { Tooltip, TooltipContent, TooltipTrigger } from '@workspace/ui/component
 import { MoreHorizontalIcon, RefreshCwIcon } from 'lucide-react'
 import { DataTable, type ClientTableFeatures } from '@/components/data-table'
 import { PageHeader } from '@/components/page-header'
+import { AccountName } from '@/components/accounts/account-name'
 import { AddProxyDialog } from '@/components/proxies/add-proxy-dialog'
 import { ImportProxiesDialog } from '@/components/proxies/import-proxies-dialog'
 import { ProxyStatusBadge } from '@/components/proxies/proxy-status-badge'
@@ -56,7 +57,7 @@ type SourceFilter = 'all' | ProxyDto['source']
 function matches(p: ProxyDto, query: string): boolean {
   if (!query) return true
   const q = query.toLowerCase()
-  return [p.host, `${p.host}:${p.port}`, p.username, p.tag, p.account && accountTitle(p.account)].some((v) => v?.toLowerCase().includes(q))
+  return [p.host, `${p.host}:${p.port}`, p.username, p.tag, p.account && accountTitle(p.account), p.account?.phone].some((v) => v?.toLowerCase().includes(q))
 }
 
 function ProxiesPage() {
@@ -147,7 +148,13 @@ function ProxiesPage() {
           cell: (info) => info.getValue() ?? '—',
         }),
         col.accessor('expiresAt', { header: 'Оплачен до', cell: (info) => formatDate(info.getValue()) }),
-        col.accessor('account', { header: 'Аккаунт', cell: (info) => (info.getValue() ? accountTitle(info.getValue()!) : <span className="text-muted-foreground">свободен</span>) }),
+        col.accessor('account', {
+          header: 'Аккаунт',
+          cell: (info) => {
+            const a = info.getValue()
+            return a ? <AccountName id={a.id} account={a} /> : <span className="text-muted-foreground">свободен</span>
+          },
+        }),
         col.accessor('tag', { header: 'Метка', cell: (info) => info.getValue() ?? '—' }),
         col.accessor('lastCheckAt', {
           header: 'Проверен',

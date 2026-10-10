@@ -1,7 +1,7 @@
-import { Link } from '@tanstack/react-router'
-import { accountTitle, type CodeDto } from '@workspace/shared/accounts'
+import type { CodeDto } from '@workspace/shared/accounts'
 import { Badge } from '@workspace/ui/components/badge'
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@workspace/ui/components/table'
+import { AccountName } from '@/components/accounts/account-name'
 import { formatDateTime, formatRelative } from '@/lib/format'
 import { CopyCodeButton } from './copy-code-button'
 
@@ -30,9 +30,7 @@ export function CodesTable({ items, showAccount, empty, fresh }: { items: CodeDt
                 </TableCell>
                 {showAccount && (
                   <TableCell>
-                    <Link to="/accounts/$id" params={{ id: c.accountId }} className="hover:underline">
-                      {accountTitle(c.account)}
-                    </Link>
+                    <AccountName id={c.accountId} account={c.account} />
                   </TableCell>
                 )}
                 <TableCell>{c.code ? <CopyCodeButton code={c.code} /> : <Badge variant="outline">без кода</Badge>}</TableCell>

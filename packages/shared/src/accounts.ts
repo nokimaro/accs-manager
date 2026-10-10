@@ -60,6 +60,8 @@ export const accountDto = z.object({
   statusChangedAt: z.string(),
   lastOkAt: z.string().nullable(),
   frozenUntil: z.string().nullable(),
+  /** the code of the account's latest @VerificationCodes message (null when it had none) and when it came */
+  lastCode: z.string().nullable(),
   lastCodeAt: z.string().nullable(),
   createdAt: z.string(),
 })
@@ -249,6 +251,11 @@ export const emailCodeNeeded = z.object({ pattern: z.string().nullable(), length
 export type EmailCodeNeeded = z.output<typeof emailCodeNeeded>
 
 /** Shown under an account label when there is no label: phone, @username or Telegram id. */
+/** «OLIMP-03 · +77001234567»: the title, and the phone too when a label stands in for it. */
+export function accountFullTitle(a: { label?: string | null; phone?: string | null; username?: string | null; tgUserId?: number | null }): string {
+  return a.label && a.phone ? `${a.label} · +${a.phone.replace(/^\+/, '')}` : accountTitle(a)
+}
+
 export function accountTitle(a: { label?: string | null; phone?: string | null; username?: string | null; tgUserId?: number | null }): string {
   if (a.label) return a.label
   if (a.phone) return `+${a.phone.replace(/^\+/, '')}`

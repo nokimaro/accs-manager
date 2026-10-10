@@ -30,13 +30,26 @@ const insertProxy = async (values: Partial<typeof proxies.$inferInsert> = {}) =>
 const json = async <T,>(res: Response) => (await res.json()) as T
 
 describe('accounts api', () => {
-  it('lists accounts with their proxy and the time of the last code', async () => {
+  it('lists accounts with their proxy and the last code with its time', async () => {
     const p = await insertProxy()
     const a = await insertAccount({ connectionMode: 'proxy', proxyId: p.id, phone: '77001234567', status: 'active' })
-    await ta.t.db.insert(codeMessages).values({ accountId: a.id, tgMessageId: 1, date: new Date('2026-10-03T10:00:00Z'), text: 't', code: '1' })
+    const quiet = await insertAccount()
+    await ta.t.db.insert(codeMessages).values([
+      { accountId: a.id, tgMessageId: 1, date: new Date('2026-10-03T09:00:00Z'), text: 'old', code: '111111' },
+      { accountId: a.id, tgMessageId: 2, date: new Date('2026-10-03T10:00:00Z'), text: 'new', code: '437610' },
+    ])
     const { items } = await json<{ items: AccountDto[] }>(await send(ta.app, '/api/accounts', { cookie }))
-    expect(items).toHaveLength(1)
-    expect(items[0]).toMatchObject({ id: a.id, phone: '77001234567', status: 'active', proxy: { id: p.id, host: p.host, status: 'ok', tgCountry: 'KZ' }, lastCodeAt: '2026-10-03T10:00:00.000Z', device })
+    expect(items).toHaveLength(2)
+    expect(items[0]).toMatchObject({
+      id: a.id,
+      phone: '77001234567',
+      status: 'active',
+      proxy: { id: p.id, host: p.host, status: 'ok', tgCountry: 'KZ' },
+      lastCode: '437610',
+      lastCodeAt: '2026-10-03T10:00:00.000Z',
+      device,
+    })
+    expect(items[1]).toMatchObject({ id: quiet.id, lastCode: null, lastCodeAt: null })
     expect((await send(ta.app, `/api/accounts/${a.id}`, { cookie })).status).toBe(200)
   })
 

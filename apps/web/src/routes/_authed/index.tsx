@@ -1,7 +1,7 @@
 import * as React from 'react'
 import { useInfiniteQuery, useQuery } from '@tanstack/react-query'
 import { createFileRoute, Link } from '@tanstack/react-router'
-import { accountTitle } from '@workspace/shared/accounts'
+import { accountFullTitle } from '@workspace/shared/accounts'
 import { Button } from '@workspace/ui/components/button'
 import { Empty, EmptyContent, EmptyDescription, EmptyHeader, EmptyMedia, EmptyTitle } from '@workspace/ui/components/empty'
 import { Field, FieldLabel } from '@workspace/ui/components/field'
@@ -38,7 +38,7 @@ function CodesPage() {
 
   const accountItems = [
     { label: 'Все аккаунты', value: null as string | null },
-    ...(accounts.data?.items ?? []).map((a) => ({ label: accountTitle(a), value: a.id as string | null })),
+    ...(accounts.data?.items ?? []).map((a) => ({ label: accountFullTitle(a), value: a.id as string | null })),
   ]
   const items = feed.data?.pages.flatMap((p) => p.items) ?? []
 

@@ -1,23 +1,10 @@
 import { Button } from '@workspace/ui/components/button'
-import { toast } from '@workspace/ui/components/toast'
 import { CopyIcon } from 'lucide-react'
+import { copyToClipboard } from '@/components/copy-button'
 
-export function CopyCodeButton({ code }: { code: string }) {
+export function CopyCodeButton({ code, size = 'sm', className = '' }: { code: string; size?: 'sm' | 'default'; className?: string }) {
   return (
-    <Button
-      variant="outline"
-      size="sm"
-      className="font-mono"
-      aria-label={`Скопировать код ${code}`}
-      onClick={async () => {
-        try {
-          await navigator.clipboard.writeText(code)
-          toast.add({ title: 'Код скопирован', description: code })
-        } catch {
-          toast.add({ title: 'Не удалось скопировать', description: 'Браузер не дал доступ к буферу обмена' })
-        }
-      }}
-    >
+    <Button variant="outline" size={size} className={`font-mono ${className}`} aria-label={`Скопировать код ${code}`} onClick={() => void copyToClipboard(code, 'Код скопирован')}>
       {code}
       <CopyIcon data-icon="inline-end" />
     </Button>

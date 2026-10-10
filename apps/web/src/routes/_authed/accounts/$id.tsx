@@ -9,6 +9,7 @@ import { Card, CardAction, CardContent, CardDescription, CardHeader, CardTitle }
 import { toast } from '@workspace/ui/components/toast'
 import { ArrowLeftIcon, PauseIcon, PlayIcon, RefreshCwIcon } from 'lucide-react'
 import { AccountNotesForm } from '@/components/accounts/account-notes-form'
+import { PhoneCopy } from '@/components/accounts/account-name'
 import { AccountRouteForm } from '@/components/accounts/account-route-form'
 import { AccountSessions } from '@/components/accounts/account-sessions'
 import { AccountStatusBadge } from '@/components/accounts/account-status-badge'
@@ -57,7 +58,7 @@ function ProfileCard({ a }: { a: AccountDto }) {
             </span>
           </Row>
           {a.statusReason && <Row label="Причина">{a.statusReason}</Row>}
-          <Row label="Телефон">{a.phone ? `+${a.phone}` : '—'}</Row>
+          <Row label="Телефон">{a.phone ? <PhoneCopy phone={a.phone} /> : '—'}</Row>
           <Row label="Имя">
             <span className="flex items-center gap-2">
               {name || '—'}
@@ -185,6 +186,21 @@ function AccountPage() {
       </div>
       <Card>
         <CardHeader>
+          <CardTitle>Коды</CardTitle>
+          <CardDescription>Сообщения от @VerificationCodes, последние 100.</CardDescription>
+          <CardAction>
+            <Button variant="outline" size="sm" render={<Link to="/" search={{ account: a.id }} />} nativeButton={false}>
+              В ленте кодов
+            </Button>
+          </CardAction>
+        </CardHeader>
+        <CardContent className="flex flex-col gap-4">
+          <TestCodePanel account={a} />
+          {codes.data ? <CodesTable items={codes.data.items} empty="Кодов пока не было" /> : <p className="text-muted-foreground text-sm">Загрузка…</p>}
+        </CardContent>
+      </Card>
+      <Card>
+        <CardHeader>
           <CardTitle>Облачный пароль</CardTitle>
           <CardDescription>Пароль двухэтапной проверки: состояние от Telegram, сам пароль — если панель его знает.</CardDescription>
         </CardHeader>
@@ -199,21 +215,6 @@ function AccountPage() {
         </CardHeader>
         <CardContent>
           <AccountSessions key={a.id} accountId={a.id} running={a.status === 'active' || a.status === 'frozen'} />
-        </CardContent>
-      </Card>
-      <Card>
-        <CardHeader>
-          <CardTitle>Коды</CardTitle>
-          <CardDescription>Сообщения от @VerificationCodes, последние 100.</CardDescription>
-          <CardAction>
-            <Button variant="outline" size="sm" render={<Link to="/" search={{ account: a.id }} />} nativeButton={false}>
-              В ленте кодов
-            </Button>
-          </CardAction>
-        </CardHeader>
-        <CardContent className="flex flex-col gap-4">
-          <TestCodePanel account={a} />
-          {codes.data ? <CodesTable items={codes.data.items} empty="Кодов пока не было" /> : <p className="text-muted-foreground text-sm">Загрузка…</p>}
         </CardContent>
       </Card>
     </div>

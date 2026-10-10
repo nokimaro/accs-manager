@@ -4,10 +4,14 @@ const escapeHtml = (s: string) => s.replaceAll('&', '&amp;').replaceAll('<', '&l
 
 type AccountLike = { label: string | null; phone: string | null; username: string | null; tgUserId: number }
 
-/** The phone when Telegram gave it, else label / @username / id — monospace, so it copies with a tap. */
+/**
+ * The phone when Telegram gave it, else label / @username / id — monospace, so it copies with a tap.
+ * The label follows the phone in brackets: «+77066843426 (OLIMP-1)».
+ */
 export function accountTag(account: AccountLike): string {
-  const title = account.phone ? `+${account.phone.replace(/^\+/, '')}` : accountTitle(account)
-  return `<code>${escapeHtml(title)}</code>`
+  if (!account.phone) return `<code>${escapeHtml(accountTitle(account))}</code>`
+  const phone = `<code>+${escapeHtml(account.phone.replace(/^\+/, ''))}</code>`
+  return account.label ? `${phone} (${escapeHtml(account.label)})` : phone
 }
 
 /** «+77001234567 получен код 575571» — the owner's one-line format. */

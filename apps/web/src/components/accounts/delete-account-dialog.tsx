@@ -1,7 +1,7 @@
 import * as React from 'react'
 import { useMutation, useQueryClient } from '@tanstack/react-query'
 import { useNavigate } from '@tanstack/react-router'
-import { accountTitle, type AccountDto } from '@workspace/shared/accounts'
+import { accountFullTitle, type AccountDto } from '@workspace/shared/accounts'
 import {
   AlertDialog,
   AlertDialogAction,
@@ -31,7 +31,7 @@ export function DeleteAccountDialog({ account }: { account: AccountDto }) {
   const remove = useMutation({
     mutationFn: () => api(`/accounts/${account.id}?logout=${logout}`, { method: 'DELETE' }),
     onSuccess: async () => {
-      toast.add({ title: 'Аккаунт удалён', description: accountTitle(account) })
+      toast.add({ title: 'Аккаунт удалён', description: accountFullTitle(account) })
       queryClient.removeQueries({ queryKey: ['accounts', account.id] })
       await queryClient.invalidateQueries({ queryKey: accountsQueryOptions.queryKey, exact: true })
       await queryClient.invalidateQueries({ queryKey: proxiesQueryOptions.queryKey })
@@ -56,7 +56,7 @@ export function DeleteAccountDialog({ account }: { account: AccountDto }) {
       </AlertDialogTrigger>
       <AlertDialogContent>
         <AlertDialogHeader>
-          <AlertDialogTitle>Удалить аккаунт {accountTitle(account)}?</AlertDialogTitle>
+          <AlertDialogTitle>Удалить аккаунт {accountFullTitle(account)}?</AlertDialogTitle>
           <AlertDialogDescription>Из панели исчезнут сессия, коды и история аккаунта. Прокси освободится.</AlertDialogDescription>
         </AlertDialogHeader>
         <Field orientation="horizontal">

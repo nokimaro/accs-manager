@@ -1,4 +1,4 @@
-import { accounts, and, codeMessages, eq, inArray, isNull, max, ne, proxies, sql, type Db } from '@workspace/db'
+import { accounts, and, codeMessages, desc, eq, inArray, isNull, ne, proxies, sql, type Db } from '@workspace/db'
 import type { AccountDto, UpdateAccountInput } from '@workspace/shared/accounts'
 import { DomainError } from '../lib/errors.ts'
 
@@ -7,7 +7,7 @@ type ProxyRef = NonNullable<AccountDto['proxy']>
 
 const iso = (d: Date | null) => (d ? d.toISOString() : null)
 
-function toAccountDto(row: AccountRow, proxy: ProxyRef | null, lastCodeAt: Date | null): AccountDto {
+function toAccountDto(row: AccountRow, proxy: ProxyRef | null, last: { code: string | null; at: Date | null }): AccountDto {
   return {
     id: row.id,
     tgUserId: row.tgUserId,
@@ -29,18 +29,25 @@ function toAccountDto(row: AccountRow, proxy: ProxyRef | null, lastCodeAt: Date 
     statusChangedAt: row.statusChangedAt.toISOString(),
     lastOkAt: iso(row.lastOkAt),
     frozenUntil: iso(row.frozenUntil),
-    lastCodeAt: iso(lastCodeAt),
+    lastCode: last.code,
+    lastCodeAt: iso(last.at),
     createdAt: row.createdAt.toISOString(),
   }
 }
 
 function selectAccounts(db: Db) {
-  const lastCodes = db.select({ accountId: codeMessages.accountId, last: max(codeMessages.date).as('last') }).from(codeMessages).groupBy(codeMessages.accountId).as('last_codes')
+  // the latest message per account: its code and time
+  const lastCodes = db
+    .selectDistinctOn([codeMessages.accountId], { accountId: codeMessages.accountId, last: codeMessages.date, lastCode: codeMessages.code })
+    .from(codeMessages)
+    .orderBy(codeMessages.accountId, desc(codeMessages.date), desc(codeMessages.id))
+    .as('last_codes')
   return db
     .select({
       account: accounts,
       proxy: { id: proxies.id, type: proxies.type, host: proxies.host, port: proxies.port, status: proxies.status, tgCountry: proxies.tgCountry },
       lastCodeAt: lastCodes.last,
+      lastCode: lastCodes.lastCode,
     })
     .from(accounts)
     .leftJoin(proxies, eq(proxies.id, accounts.proxyId))
@@ -50,7 +57,7 @@ function selectAccounts(db: Db) {
 type Selected = Awaited<ReturnType<ReturnType<typeof selectAccounts>['execute']>>[number]
 // an aggregate in a subquery may come back as a string or a Date depending on the driver path
 const asDate = (v: unknown) => (v instanceof Date ? v : v ? new Date(String(v)) : null)
-const fromRow = (r: Selected) => toAccountDto(r.account, r.proxy?.id ? (r.proxy as ProxyRef) : null, asDate(r.lastCodeAt))
+const fromRow = (r: Selected) => toAccountDto(r.account, r.proxy?.id ? (r.proxy as ProxyRef) : null, { code: r.lastCode ?? null, at: asDate(r.lastCodeAt) })
 
 export async function listAccounts(db: Db): Promise<AccountDto[]> {
   return (await selectAccounts(db).orderBy(accounts.createdAt)).map(fromRow)

@@ -17,9 +17,11 @@ import { Input } from '@workspace/ui/components/input'
 import { toast } from '@workspace/ui/components/toast'
 import { ToggleGroup, ToggleGroupItem } from '@workspace/ui/components/toggle-group'
 import { MoreHorizontalIcon } from 'lucide-react'
+import { AccountName } from '@/components/accounts/account-name'
 import { AccountStatusBadge } from '@/components/accounts/account-status-badge'
 import { AddAccountDialog } from '@/components/accounts/add-account-dialog'
 import { DataTable, type ClientTableFeatures } from '@/components/data-table'
+import { CopyCodeButton } from '@/components/codes/copy-code-button'
 import { PageHeader } from '@/components/page-header'
 import { ProxyStatusBadge } from '@/components/proxies/proxy-status-badge'
 import { ACCOUNT_STATUS_FILTERS, accountsQueryOptions, type AccountStatusFilter } from '@/lib/accounts'
@@ -65,11 +67,21 @@ function AccountsPage() {
           cell: ({ row }) => {
             const a = row.original
             const name = [a.firstName, a.lastName].filter(Boolean).join(' ')
+            return <AccountName id={a.id} account={a} extra={[name, a.username && `@${a.username}`].filter(Boolean).join(' · ') || `id ${a.tgUserId}`} />
+          },
+        }),
+        col.accessor('lastCodeAt', {
+          header: 'Последний код',
+          cell: ({ row }) => {
+            const a = row.original
+            if (!a.lastCodeAt) return <span className="text-muted-foreground">—</span>
             return (
-              <Link to="/accounts/$id" params={{ id: a.id }} className="flex flex-col hover:underline">
-                <span className="font-medium">{accountTitle(a)}</span>
-                <span className="text-muted-foreground text-xs">{[name, a.username && `@${a.username}`].filter(Boolean).join(' · ') || `id ${a.tgUserId}`}</span>
-              </Link>
+              <span className="flex flex-col items-start gap-1">
+                {a.lastCode ? <CopyCodeButton code={a.lastCode} size="default" className="text-base" /> : <Badge variant="outline">без кода</Badge>}
+                <span className="text-muted-foreground text-xs" title={formatDateTime(a.lastCodeAt)}>
+                  {formatRelative(a.lastCodeAt)}
+                </span>
+              </span>
             )
           },
         }),
@@ -90,7 +102,6 @@ function AccountsPage() {
             )
           },
         }),
-        col.accessor('lastCodeAt', { header: 'Последний код', cell: (info) => <span title={formatDateTime(info.getValue())}>{formatRelative(info.getValue())}</span> }),
         col.accessor('lastOkAt', { header: 'На связи', cell: (info) => <span title={formatDateTime(info.getValue())} className="text-muted-foreground text-sm">{formatRelative(info.getValue())}</span> }),
         col.accessor('source', { header: 'Источник', cell: (info) => accountSourceLabels[info.getValue()] }),
         col.display({
