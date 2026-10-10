@@ -87,8 +87,25 @@ describe('codes feed', () => {
     const { fetchMock, router } = setup(`/?account=${A2.id}`, () => [code(5, { accountId: A2.id, account: { label: 'Второй', phone: A2.phone, username: null } })])
     expect(await screen.findByRole('button', { name: 'Скопировать код 100005' })).toBeInTheDocument()
     expect(codesCalls(fetchMock).at(-1)!.searchParams.get('accountId')).toBe(A2.id)
-    expect(screen.getByLabelText('Аккаунт')).toHaveTextContent('Второй')
+    expect(screen.getByLabelText('Аккаунт')).toHaveValue('Второй · +77007654321')
     expect(router.state.location.search).toEqual({ account: A2.id })
+  })
+
+  it('finds an account by its label or by part of its number, and clears back to all accounts', async () => {
+    const { router } = setup('/', () => [code(7)])
+    const input = await screen.findByLabelText('Аккаунт')
+    const user = userEvent.setup()
+    await user.type(input, '+7 700 765')
+    expect(await screen.findByRole('option', { name: /Второй/ })).toHaveTextContent('+77007654321')
+    expect(screen.queryByRole('option', { name: /\+77001234567/ })).not.toBeInTheDocument()
+    await user.click(screen.getByRole('option', { name: /Второй/ }))
+    await waitFor(() => expect(router.state.location.search).toEqual({ account: A2.id }))
+    await user.click(await screen.findByRole('button', { name: 'Очистить' }))
+    await waitFor(() => expect(router.state.location.search).toEqual({}))
+
+    await user.type(input, 'втор')
+    expect(await screen.findByRole('option', { name: /Второй/ })).toBeInTheDocument()
+    expect(screen.queryByRole('option', { name: /\+77001234567/ })).not.toBeInTheDocument()
   })
 
   it('a new code arrives live and is marked', async () => {

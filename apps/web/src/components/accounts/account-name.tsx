@@ -1,6 +1,7 @@
 import type * as React from 'react'
 import { Link } from '@tanstack/react-router'
 import { accountTitle } from '@workspace/shared/accounts'
+import { cn } from '@workspace/ui/lib/utils'
 import { CopyButton } from '@/components/copy-button'
 
 const digits = (phone: string) => phone.replace(/^\+/, '')
@@ -9,7 +10,7 @@ const digits = (phone: string) => phone.replace(/^\+/, '')
 export function PhoneCopy({ phone, className }: { phone: string; className?: string }) {
   const number = digits(phone)
   return (
-    <span className={`inline-flex items-center gap-1 ${className ?? ''}`}>
+    <span className={cn('inline-flex items-center gap-1', className)}>
       <span className="tabular-nums">+{number}</span>
       <CopyButton value={number} label={`Скопировать номер +${number}`} copied="Номер скопирован" />
     </span>

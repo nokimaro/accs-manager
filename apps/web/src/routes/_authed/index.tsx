@@ -1,14 +1,13 @@
 import * as React from 'react'
 import { useInfiniteQuery, useQuery } from '@tanstack/react-query'
 import { createFileRoute, Link } from '@tanstack/react-router'
-import { accountFullTitle } from '@workspace/shared/accounts'
 import { Button } from '@workspace/ui/components/button'
 import { Empty, EmptyContent, EmptyDescription, EmptyHeader, EmptyMedia, EmptyTitle } from '@workspace/ui/components/empty'
 import { Field, FieldLabel } from '@workspace/ui/components/field'
-import { Select, SelectContent, SelectGroup, SelectItem, SelectTrigger, SelectValue } from '@workspace/ui/components/select'
 import { Spinner } from '@workspace/ui/components/spinner'
 import { KeyRoundIcon } from 'lucide-react'
 import { z } from 'zod'
+import { AccountPicker } from '@/components/accounts/account-picker'
 import { CodesTable } from '@/components/codes/codes-table'
 import { PageHeader } from '@/components/page-header'
 import { SetupAlert } from '@/components/setup-alert'
@@ -36,10 +35,6 @@ function CodesPage() {
     if (event.type === 'code.new' && Date.now() - Date.parse(event.date) < FRESH_MS) setFresh((prev) => new Set(prev).add(event.id))
   })
 
-  const accountItems = [
-    { label: 'Все аккаунты', value: null as string | null },
-    ...(accounts.data?.items ?? []).map((a) => ({ label: accountFullTitle(a), value: a.id as string | null })),
-  ]
   const items = feed.data?.pages.flatMap((p) => p.items) ?? []
 
   return (
@@ -64,22 +59,15 @@ function CodesPage() {
       ) : (
         <>
           <div className="flex flex-wrap items-end gap-4">
-            <Field className="w-64">
+            <Field className="w-full sm:w-80">
               <FieldLabel htmlFor="codes-account">Аккаунт</FieldLabel>
-              <Select items={accountItems} value={account ?? null} onValueChange={(v) => void navigate({ search: v ? { account: v } : {} })}>
-                <SelectTrigger id="codes-account" className="w-full">
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectGroup>
-                    {accountItems.map((item) => (
-                      <SelectItem key={item.value ?? 'all'} value={item.value}>
-                        {item.label}
-                      </SelectItem>
-                    ))}
-                  </SelectGroup>
-                </SelectContent>
-              </Select>
+              <AccountPicker
+                id="codes-account"
+                accounts={accounts.data?.items ?? []}
+                value={account ?? null}
+                onChange={(id) => void navigate({ search: id ? { account: id } : {} })}
+                placeholder="Все аккаунты — поиск по метке, номеру"
+              />
             </Field>
           </div>
           {feed.isPending ? (
